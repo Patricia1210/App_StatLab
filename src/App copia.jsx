@@ -248,50 +248,43 @@ const App = () => {
   }, [selectedSection]);
 
   const handleFileUpload = (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  
-  setIsUploading(true);
-  setFileName(file.name);
-  
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    setTimeout(() => {
-      const text = e.target?.result;
-      const lines = text.split('\n').filter(line => line.trim());
-      
-      if (lines.length > 0) {
-        const headers = lines[0].split(',').map(h => h.trim());
-        const parsedData = lines.slice(1).map((line, index) => {
-          const values = line.split(',').map(v => v.trim());
-          const row = { id: index };
-          headers.forEach((header, i) => {
-            row[header] = values[i];
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setIsUploading(true);
+    setFileName(file.name);
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setTimeout(() => {
+        const text = e.target?.result;
+        const lines = text.split('\n').filter(line => line.trim());
+        
+        if (lines.length > 0) {
+          const headers = lines[0].split(',').map(h => h.trim());
+          const parsedData = lines.slice(1).map((line, index) => {
+            const values = line.split(',').map(v => v.trim());
+            const row = { id: index };
+            headers.forEach((header, i) => {
+              row[header] = values[i];
+            });
+            return row;
           });
-          return row;
-        });
-        
-        setData(parsedData);
-        setColumns(headers);
-        
-        // ✅ CORRECCIÓN CRÍTICA: NO asignar xAxis ni yAxis automáticamente
-        setConfig(prev => ({ 
-          ...prev, 
-          // ❌ ELIMINADO: xAxis: headers[0],
-          // ❌ ELIMINADO: yAxis: headers[1] || headers[0],
-          // ✅ NUEVO: Dejar los ejes vacíos para que el usuario los seleccione
-          xAxis: '',
-          yAxis: '',
-          xAxisLabel: '',
-          yAxisLabel: '',
-          chartTitle: `Sección ${selectedSection}: ${activeSectionData?.title || 'Análisis'}`
-        }));
-      }
-      setIsUploading(false);
-    }, 800);
+          
+          setData(parsedData);
+          setColumns(headers);
+          setConfig(prev => ({ 
+            ...prev, 
+            xAxis: headers[0], 
+            yAxis: headers[1] || headers[0],
+            chartTitle: `Sección ${selectedSection}: ${activeSectionData?.title || 'Análisis'}`
+          }));
+        }
+        setIsUploading(false);
+      }, 800);
+    };
+    reader.readAsText(file);
   };
-  reader.readAsText(file);
-};
 
   const copyToClipboard = (sectionId) => {
     const url = `${window.location.origin}${window.location.pathname}?section=${sectionId}`;
@@ -656,7 +649,7 @@ const App = () => {
                 },
                 {
                   q: "¿Qué formato deben tener mis datos?",
-                  a: "Los archivos deben estar en formato CSV (valores separados por comas). Desde Excel puedes exportar tus archivos a formato CSV. Cada laboratorio incluye datasets de ejemplo en los recursos de Udemy."
+                  a: "Los archivos deben estar en formato CSV (valores separados por comas). Desde Excel puedes exportar tus archivos a formato CSV.Cada laboratorio incluye datasets de ejemplo en los recursos de Udemy."
                 },
                 {
                   q: "¿Puedo usar mis propios datos?",
@@ -716,22 +709,12 @@ const App = () => {
       </div>
     );
   }
-// ========================================
-  // INICIO: LABORATORIO SECCIÓN 0.2
-  // Laboratorio de prácticas (presentación)
-  // ========================================
-  
+
   // LAB VIEW
   if (view === 'lab' && activeSectionData) {
     const currentPalette = PALETTES[config.colorPalette];
     const currentBgColor = BACKGROUND_COLORS[config.backgroundColor];
     const isLightBg = ['white', 'cream'].includes(config.backgroundColor);
-    
-    // ✅ CAMBIO 1: Settings visibles por defecto solo en sección 0.2
-    const shouldShowSettingsByDefault = selectedSection === '0.2';
-    
-    // ✅ NUEVO: Verificar si hay variables seleccionadas para mostrar el gráfico
-    const hasSelectedVariables = config.xAxis && config.yAxis;
     
     return (
       <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -800,11 +783,18 @@ const App = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <div className="lg:col-span-4 space-y-6">
               <div className="glass rounded-3xl p-6 space-y-6 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500">
-                {/* ✅ ELIMINADO: Botón del engrane que ya no sirve */}
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-black flex items-center gap-2 text-white">
                     <Upload className="w-5 h-5 text-indigo-400" /> Cargar Dataset
                   </h3>
+                  {data.length > 0 && (
+                    <button 
+                      onClick={() => setShowSettings(!showSettings)}
+                      className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
+                    >
+                      <Settings className={`w-4 h-4 text-slate-400 transition-transform ${showSettings ? 'rotate-90' : ''}`} />
+                    </button>
+                  )}
                 </div>
                 
                 <div className="relative group/upload">
@@ -834,8 +824,7 @@ const App = () => {
                   </div>
                 </div>
 
-                {/* ✅ Settings siempre visibles cuando hay datos */}
-                {data.length > 0 && (
+                {data.length > 0 && showSettings && (
                   <div className="space-y-4 pt-4 border-t border-white/5">
                     <div className="space-y-2">
                       <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Título del Gráfico</label>
@@ -852,50 +841,40 @@ const App = () => {
                       <label className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
                         <Database className="w-3 h-3" /> Eje X
                       </label>
-                      {/* ✅ CORREGIDO: Opción vacía por defecto */}
                       <select 
                         value={config.xAxis} 
-                        onChange={(e) => setConfig({...config, xAxis: e.target.value, xAxisLabel: e.target.value})} 
+                        onChange={(e) => setConfig({...config, xAxis: e.target.value})} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                       >
-                        <option value="">Seleccionar variable...</option>
                         {columns.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
-                      {/* ✅ Campo editable para título del Eje X */}
-                      {config.xAxis && (
-                        <input
-                          type="text"
-                          value={config.xAxisLabel || config.xAxis}
-                          onChange={(e) => setConfig({...config, xAxisLabel: e.target.value})}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
-                          placeholder="Título del eje X"
-                        />
-                      )}
+                      <input
+                        type="text"
+                        value={config.xAxisLabel}
+                        onChange={(e) => setConfig({...config, xAxisLabel: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
+                        placeholder="Nombre del eje X"
+                      />
                     </div>
                     
                     <div className="space-y-2">
                       <label className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
                         <TrendingUp className="w-3 h-3" /> Eje Y
                       </label>
-                      {/* ✅ CORREGIDO: Opción vacía por defecto */}
                       <select 
                         value={config.yAxis} 
-                        onChange={(e) => setConfig({...config, yAxis: e.target.value, yAxisLabel: e.target.value})} 
+                        onChange={(e) => setConfig({...config, yAxis: e.target.value})} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                       >
-                        <option value="">Seleccionar variable...</option>
                         {columns.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
-                      {/* ✅ Campo editable para título del Eje Y */}
-                      {config.yAxis && (
-                        <input
-                          type="text"
-                          value={config.yAxisLabel || config.yAxis}
-                          onChange={(e) => setConfig({...config, yAxisLabel: e.target.value})}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
-                          placeholder="Título del eje Y"
-                        />
-                      )}
+                      <input
+                        type="text"
+                        value={config.yAxisLabel}
+                        onChange={(e) => setConfig({...config, yAxisLabel: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
+                        placeholder="Nombre del eje Y"
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -1003,7 +982,7 @@ const App = () => {
             <div className="lg:col-span-8 space-y-6">
               <div className="glass rounded-[2.5rem] p-10 min-h-[600px] border border-white/10 relative overflow-hidden" style={{backgroundColor: currentBgColor.color}}>
                 <div className="absolute top-6 right-6 z-10 flex items-center gap-3">
-                  {data.length > 0 && hasSelectedVariables && (
+                  {data.length > 0 && (
                     <>
                       <button
                         onClick={downloadChart}
@@ -1020,34 +999,34 @@ const App = () => {
                   )}
                 </div>
 
-                {/* ✅ CORREGIDO: Solo mostrar gráfico si hay datos Y variables seleccionadas */}
-                {data.length > 0 && hasSelectedVariables ? (
+                {data.length > 0 ? (
                   <div className="w-full h-[550px] pt-12">
                     <h4 className={`text-2xl font-black mb-6 text-center ${isLightBg ? 'text-slate-900' : 'text-white'}`}>
                       {config.chartTitle}
                     </h4>
                     <div style={{ width: '100%', height: '480px' }}>
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer>
                         {config.chartType === 'bar' ? (
-                          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                          <BarChart data={chartData}>
                             {config.showGrid && <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
                             <XAxis 
                               dataKey={config.xAxis}
-                              label={{ value: config.xAxisLabel || config.xAxis, position: 'insideBottom', offset: -10, style: { fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
+                              label={{ value: config.xAxisLabel, position: 'insideBottom', offset: -5, fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontSize: 11, fontWeight: 700}} 
                               axisLine={false} 
                               tickLine={false}
                               angle={-30}
                               textAnchor="end"
-                              height={70}
+                              height={80}
                             />
                             <YAxis 
-                              label={{ value: config.yAxisLabel || config.yAxis, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
+                              label={{ value: config.yAxisLabel, angle: -90, position: 'insideLeft', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontSize: 11, fontWeight: 700}} 
                               axisLine={false} 
                               tickLine={false}
                             />
                             <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(99, 102, 241, 0.1)'}} />
+                            {config.showLegend && <Legend wrapperStyle={{paddingTop: '20px'}} />}
                             <Bar 
                               dataKey={config.yAxis}
                               radius={[12, 12, 0, 0]} 
@@ -1060,23 +1039,24 @@ const App = () => {
                             </Bar>
                           </BarChart>
                         ) : config.chartType === 'line' ? (
-                          <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                          <LineChart data={chartData}>
                             {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
                             <XAxis 
                               dataKey={config.xAxis}
-                              label={{ value: config.xAxisLabel || config.xAxis, position: 'insideBottom', offset: -10, style: { fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
+                              label={{ value: config.xAxisLabel, position: 'insideBottom', offset: -5, fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
                               axisLine={false}
                               angle={-30}
                               textAnchor="end"
-                              height={70}
+                              height={80}
                             />
                             <YAxis 
-                              label={{ value: config.yAxisLabel || config.yAxis, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
+                              label={{ value: config.yAxisLabel, angle: -90, position: 'insideLeft', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
-                              axisLine={false}
+                              axisLine={false} 
                             />
                             <Tooltip content={<CustomTooltip />} />
+                            {config.showLegend && <Legend />}
                             <Line 
                               type="monotone" 
                               dataKey={config.yAxis} 
@@ -1088,23 +1068,24 @@ const App = () => {
                             />
                           </LineChart>
                         ) : (
-                          <ScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                          <ScatterChart>
                             {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
                             <XAxis 
                               dataKey={config.xAxis} 
-                              name={config.xAxisLabel || config.xAxis}
-                              label={{ value: config.xAxisLabel || config.xAxis, position: 'insideBottom', offset: -10, style: { fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
+                              name={config.xAxisLabel}
+                              label={{ value: config.xAxisLabel, position: 'insideBottom', offset: -5, fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
                               axisLine={false}
                             />
                             <YAxis 
                               dataKey={config.yAxis} 
-                              name={config.yAxisLabel || config.yAxis}
-                              label={{ value: config.yAxisLabel || config.yAxis, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
+                              name={config.yAxisLabel}
+                              label={{ value: config.yAxisLabel, angle: -90, position: 'insideLeft', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
                               axisLine={false}
                             />
                             <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+                            {config.showLegend && <Legend />}
                             <Scatter 
                               name="Muestras" 
                               data={chartData} 
@@ -1125,12 +1106,8 @@ const App = () => {
                       </div>
                     </div>
                     <div className="text-center">
-                      <p className="font-black text-2xl text-slate-300 mb-2">
-                        {data.length > 0 ? 'Selecciona las Variables' : 'Esperando Datos'}
-                      </p>
-                      <p className="text-sm font-medium text-slate-500">
-                        {data.length > 0 ? 'Elige las variables para los ejes X e Y' : 'Sube un archivo CSV para comenzar el análisis'}
-                      </p>
+                      <p className="font-black text-2xl text-slate-300 mb-2">Esperando Datos</p>
+                      <p className="text-sm font-medium text-slate-500">Sube un archivo CSV para comenzar el análisis</p>
                     </div>
                   </div>
                 )}
@@ -1181,10 +1158,7 @@ const App = () => {
       </div>
     );
   }
-  
-  // ========================================
-  // FIN: LABORATORIO SECCIÓN 0.2
-  // ========================================
+
  // HOME VIEW
 return (
   <div className="min-h-screen bg-slate-950">
