@@ -10,6 +10,8 @@ import {
   Cell, LineChart, Line, ScatterChart, Scatter, Legend
 } from 'recharts';
 
+import statlabLogo from './assets/logo-statlab.png';
+
 // Estructura basada en el libro "Estadística_01.pdf"
 const BOOK_STRUCTURE = [
   {
@@ -189,6 +191,16 @@ const PALETTES = {
   ocean: { name: 'Océano', colors: ['#1971c2', '#1864ab', '#1098ad', '#0c8599', '#0b7285'] }
 };
 
+const BACKGROUND_COLORS = {
+  dark: { name: 'Oscuro', color: '#020617' },
+  slate: { name: 'Pizarra', color: '#1e293b' },
+  gray: { name: 'Gris', color: '#374151' },
+  white: { name: 'Blanco', color: '#ffffff' },
+  cream: { name: 'Crema', color: '#fef3c7' },
+  blue: { name: 'Azul', color: '#1e3a8a' },
+  purple: { name: 'Púrpura', color: '#581c87' }
+};
+
 const App = () => {
   const [view, setView] = useState('home');
   const [selectedSection, setSelectedSection] = useState(null);
@@ -205,8 +217,11 @@ const App = () => {
     xAxis: '',
     yAxis: '',
     chartTitle: 'Análisis de Datos',
+    xAxisLabel: 'Eje X',
+    yAxisLabel: 'Eje Y',
     chartType: 'bar',
     colorPalette: 'modern',
+    backgroundColor: 'dark',
     showGrid: true,
     showLegend: true,
     animationDuration: 1000
@@ -322,7 +337,8 @@ const App = () => {
     canvas.height = 900;
 
     img.onload = () => {
-      ctx.fillStyle = '#020617';
+      const bgColor = BACKGROUND_COLORS[config.backgroundColor].color;
+      ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 50, 50, canvas.width - 100, canvas.height - 100);
       
@@ -444,11 +460,11 @@ const App = () => {
                   </p>
                 </div>
                 <a 
-                  href="mailto:patyherrejoncalderon@gmail.com"
+                  href="mailto:phc.research.analytics@gmail.com"
                   className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all group/btn"
                 >
                   <Mail className="w-4 h-4 text-pink-400" />
-                  <span className="text-sm font-bold text-slate-300 group-hover/btn:text-white">patyherrejoncalderon@gmail.com</span>
+                  <span className="text-sm font-bold text-slate-300 group-hover/btn:text-white">phc.research.analytics@gmail.com</span>
                 </a>
               </div>
             </div>
@@ -480,11 +496,11 @@ const App = () => {
             <h3 className="text-2xl font-black text-white mb-4">¿Tienes preguntas o sugerencias?</h3>
             <p className="text-slate-400 mb-6">Nuestro equipo está disponible para ayudarte</p>
             <a 
-              href="mailto:soporte@statlabresearch.mx"
+              href="mailto:statlabresearch2025@gmail.com"
               className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider hover:shadow-2xl hover:shadow-indigo-500/50 transition-all hover:scale-105"
             >
               <Mail className="w-5 h-5" />
-              soporte@statlabresearch.mx
+              statlabresearch2025@gmail.com
             </a>
           </div>
         </main>
@@ -593,6 +609,83 @@ const App = () => {
             </div>
           </div>
 
+          <div className="glass rounded-3xl p-10 border-l-4 border-l-purple-500 relative overflow-hidden group hover:shadow-2xl hover:shadow-purple-500/10 transition-all">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              <Play className="w-32 h-32" />
+            </div>
+            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div>
+                <h3 className="text-2xl font-black text-white mb-2">¿Aún no estás inscrito en el curso?</h3>
+                <p className="text-slate-400 leading-relaxed">
+                  Accede al curso completo de Fundamentos de Estadística en Udemy con clases en video, ejercicios y recursos descargables.
+                </p>
+              </div>
+              <a 
+                href="https://www.udemy.com/course/fundamentos-de-estadistica/" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0 flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider hover:shadow-2xl hover:shadow-purple-500/50 transition-all hover:scale-105 group"
+              >
+                <Play className="w-5 h-5 fill-current" />
+                Ir al Curso en Udemy
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </a>
+            </div>
+          </div>
+
+          <div className="glass rounded-3xl p-10 border border-white/10">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+                <Info className="w-6 h-6 text-white" />
+              </div>
+              <h2 className="text-3xl font-black text-white">Preguntas Frecuentes</h2>
+            </div>
+
+            <div className="space-y-4">
+              {[
+                {
+                  q: "¿Necesito instalar algo para usar los laboratorios?",
+                  a: "No, los laboratorios funcionan 100% en línea desde tu navegador. Solo necesitas los archivos CSV que descargarás de Udemy."
+                },
+                {
+                  q: "¿Qué formato deben tener mis datos?",
+                  a: "Los archivos deben estar en formato CSV (valores separados por comas). Cada laboratorio incluye datasets de ejemplo en los recursos de Udemy."
+                },
+                {
+                  q: "¿Puedo usar mis propios datos?",
+                  a: "¡Por supuesto! Puedes cargar cualquier archivo CSV con tus propios datos para experimentar y practicar."
+                },
+                {
+                  q: "¿Los laboratorios guardan mi progreso?",
+                  a: "Actualmente los laboratorios no guardan progreso. Te recomendamos descargar tus gráficos cuando termines cada análisis."
+                },
+                {
+                  q: "¿Qué navegadores son compatibles?",
+                  a: "Los laboratorios funcionan en Chrome, Firefox, Safari y Edge actualizados. Recomendamos Chrome para mejor rendimiento."
+                },
+                {
+                  q: "¿Puedo compartir el enlace de un laboratorio específico?",
+                  a: "Sí, cada laboratorio tiene un botón para copiar su enlace directo. Así puedes marcarlo o compartirlo fácilmente."
+                }
+              ].map((faq, i) => (
+                <details key={i} className="group/faq p-6 rounded-2xl bg-slate-900/50 border border-white/5 hover:border-emerald-500/30 hover:bg-slate-900 transition-all">
+                  <summary className="font-bold text-white cursor-pointer list-none flex items-center justify-between">
+                    <span className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-black">
+                        {i + 1}
+                      </span>
+                      {faq.q}
+                    </span>
+                    <ChevronDown className="w-5 h-5 text-slate-400 group-open/faq:rotate-180 transition-transform" />
+                  </summary>
+                  <p className="mt-4 text-slate-400 leading-relaxed pl-9">
+                    {faq.a}
+                  </p>
+                </details>
+              ))}
+            </div>
+          </div>
+
           <div className="text-center space-y-6 pt-8">
             <p className="text-xl text-slate-300 font-bold">
               ¿Listo para comenzar?
@@ -620,6 +713,8 @@ const App = () => {
   // LAB VIEW
   if (view === 'lab' && activeSectionData) {
     const currentPalette = PALETTES[config.colorPalette];
+    const currentBgColor = BACKGROUND_COLORS[config.backgroundColor];
+    const isLightBg = ['white', 'cream'].includes(config.backgroundColor);
     
     return (
       <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -732,6 +827,17 @@ const App = () => {
                 {data.length > 0 && showSettings && (
                   <div className="space-y-4 pt-4 border-t border-white/5">
                     <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Título del Gráfico</label>
+                      <input
+                        type="text"
+                        value={config.chartTitle}
+                        onChange={(e) => setConfig({...config, chartTitle: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                        placeholder="Título del gráfico"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
                       <label className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
                         <Database className="w-3 h-3" /> Eje X
                       </label>
@@ -742,6 +848,13 @@ const App = () => {
                       >
                         {columns.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
+                      <input
+                        type="text"
+                        value={config.xAxisLabel}
+                        onChange={(e) => setConfig({...config, xAxisLabel: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
+                        placeholder="Nombre del eje X"
+                      />
                     </div>
                     
                     <div className="space-y-2">
@@ -755,6 +868,13 @@ const App = () => {
                       >
                         {columns.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
+                      <input
+                        type="text"
+                        value={config.yAxisLabel}
+                        onChange={(e) => setConfig({...config, yAxisLabel: e.target.value})}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
+                        placeholder="Nombre del eje Y"
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -777,7 +897,7 @@ const App = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Paleta</label>
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Paleta de Colores</label>
                       <select 
                         value={config.colorPalette} 
                         onChange={(e) => setConfig({...config, colorPalette: e.target.value})} 
@@ -795,6 +915,24 @@ const App = () => {
                             style={{backgroundColor: color}}
                           />
                         ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Color de Fondo</label>
+                      <select 
+                        value={config.backgroundColor} 
+                        onChange={(e) => setConfig({...config, backgroundColor: e.target.value})} 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        {Object.entries(BACKGROUND_COLORS).map(([key, bg]) => (
+                          <option key={key} value={key}>{bg.name}</option>
+                        ))}
+                      </select>
+                      <div className="mt-3 p-4 rounded-xl shadow-lg border-2 border-white/10" style={{backgroundColor: BACKGROUND_COLORS[config.backgroundColor].color}}>
+                        <p className={`text-xs font-bold text-center ${['white', 'cream'].includes(config.backgroundColor) ? 'text-slate-800' : 'text-white'}`}>
+                          Vista previa del fondo
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -842,7 +980,7 @@ const App = () => {
             </div>
 
             <div className="lg:col-span-8 space-y-6">
-              <div className="glass rounded-[2.5rem] p-10 min-h-[600px] border border-white/10 relative overflow-hidden bg-slate-900/20">
+              <div className="glass rounded-[2.5rem] p-10 min-h-[600px] border border-white/10 relative overflow-hidden" style={{backgroundColor: currentBgColor.color}}>
                 <div className="absolute top-6 right-6 z-10 flex items-center gap-3">
                   {data.length > 0 && (
                     <>
@@ -863,88 +1001,101 @@ const App = () => {
 
                 {data.length > 0 ? (
                   <div className="w-full h-[550px] pt-12">
-                    <h4 className="text-2xl font-black text-white mb-8 text-center">{config.chartTitle}</h4>
-                    <ResponsiveContainer width="100%" height="90%">
-                      {config.chartType === 'bar' ? (
-                        <BarChart data={chartData}>
-                          {config.showGrid && <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />}
-                          <XAxis 
-                            dataKey={config.xAxis} 
-                            tick={{fill: '#64748b', fontSize: 11, fontWeight: 700}} 
-                            axisLine={false} 
-                            tickLine={false}
-                            angle={-30}
-                            textAnchor="end"
-                            height={80}
-                          />
-                          <YAxis 
-                            tick={{fill: '#64748b', fontSize: 11, fontWeight: 700}} 
-                            axisLine={false} 
-                            tickLine={false}
-                          />
-                          <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(99, 102, 241, 0.1)'}} />
-                          {config.showLegend && <Legend wrapperStyle={{paddingTop: '20px'}} />}
-                          <Bar 
-                            dataKey={config.yAxis}
-                            radius={[12, 12, 0, 0]} 
-                            barSize={50}
-                            animationDuration={config.animationDuration}
-                          >
-                            {chartData.map((_, i) => (
-                              <Cell key={i} fill={currentPalette.colors[i % currentPalette.colors.length]} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      ) : config.chartType === 'line' ? (
-                        <LineChart data={chartData}>
-                          {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />}
-                          <XAxis 
-                            dataKey={config.xAxis} 
-                            tick={{fill: '#64748b', fontWeight: 700}} 
-                            axisLine={false}
-                            angle={-30}
-                            textAnchor="end"
-                            height={80}
-                          />
-                          <YAxis tick={{fill: '#64748b', fontWeight: 700}} axisLine={false} />
-                          <Tooltip content={<CustomTooltip />} />
-                          {config.showLegend && <Legend />}
-                          <Line 
-                            type="monotone" 
-                            dataKey={config.yAxis} 
-                            stroke={currentPalette.colors[0]} 
-                            strokeWidth={4} 
-                            dot={{r: 6, fill: currentPalette.colors[0], strokeWidth: 3, stroke: '#fff'}}
-                            activeDot={{r: 8, strokeWidth: 3}}
-                            animationDuration={config.animationDuration}
-                          />
-                        </LineChart>
-                      ) : (
-                        <ScatterChart>
-                          {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />}
-                          <XAxis 
-                            dataKey={config.xAxis} 
-                            name={config.xAxis} 
-                            tick={{fill: '#64748b', fontWeight: 700}} 
-                            axisLine={false}
-                          />
-                          <YAxis 
-                            dataKey={config.yAxis} 
-                            name={config.yAxis} 
-                            tick={{fill: '#64748b', fontWeight: 700}} 
-                            axisLine={false}
-                          />
-                          <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-                          {config.showLegend && <Legend />}
-                          <Scatter 
-                            name="Muestras" 
-                            data={chartData} 
-                            fill={currentPalette.colors[2]} 
-                            shape="circle"
-                          />
-                        </ScatterChart>
-                      )}
-                    </ResponsiveContainer>
+                    <h4 className={`text-2xl font-black mb-6 text-center ${isLightBg ? 'text-slate-900' : 'text-white'}`}>
+                      {config.chartTitle}
+                    </h4>
+                    <div style={{ width: '100%', height: '480px' }}>
+                      <ResponsiveContainer>
+                        {config.chartType === 'bar' ? (
+                          <BarChart data={chartData}>
+                            {config.showGrid && <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
+                            <XAxis 
+                              dataKey={config.xAxis}
+                              label={{ value: config.xAxisLabel, position: 'insideBottom', offset: -5, fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontSize: 11, fontWeight: 700}} 
+                              axisLine={false} 
+                              tickLine={false}
+                              angle={-30}
+                              textAnchor="end"
+                              height={80}
+                            />
+                            <YAxis 
+                              label={{ value: config.yAxisLabel, angle: -90, position: 'insideLeft', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontSize: 11, fontWeight: 700}} 
+                              axisLine={false} 
+                              tickLine={false}
+                            />
+                            <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(99, 102, 241, 0.1)'}} />
+                            {config.showLegend && <Legend wrapperStyle={{paddingTop: '20px'}} />}
+                            <Bar 
+                              dataKey={config.yAxis}
+                              radius={[12, 12, 0, 0]} 
+                              barSize={50}
+                              animationDuration={config.animationDuration}
+                            >
+                              {chartData.map((_, i) => (
+                                <Cell key={i} fill={currentPalette.colors[i % currentPalette.colors.length]} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        ) : config.chartType === 'line' ? (
+                          <LineChart data={chartData}>
+                            {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
+                            <XAxis 
+                              dataKey={config.xAxis}
+                              label={{ value: config.xAxisLabel, position: 'insideBottom', offset: -5, fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
+                              axisLine={false}
+                              angle={-30}
+                              textAnchor="end"
+                              height={80}
+                            />
+                            <YAxis 
+                              label={{ value: config.yAxisLabel, angle: -90, position: 'insideLeft', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
+                              axisLine={false} 
+                            />
+                            <Tooltip content={<CustomTooltip />} />
+                            {config.showLegend && <Legend />}
+                            <Line 
+                              type="monotone" 
+                              dataKey={config.yAxis} 
+                              stroke={currentPalette.colors[0]} 
+                              strokeWidth={4} 
+                              dot={{r: 6, fill: currentPalette.colors[0], strokeWidth: 3, stroke: '#fff'}}
+                              activeDot={{r: 8, strokeWidth: 3}}
+                              animationDuration={config.animationDuration}
+                            />
+                          </LineChart>
+                        ) : (
+                          <ScatterChart>
+                            {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
+                            <XAxis 
+                              dataKey={config.xAxis} 
+                              name={config.xAxisLabel}
+                              label={{ value: config.xAxisLabel, position: 'insideBottom', offset: -5, fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
+                              axisLine={false}
+                            />
+                            <YAxis 
+                              dataKey={config.yAxis} 
+                              name={config.yAxisLabel}
+                              label={{ value: config.yAxisLabel, angle: -90, position: 'insideLeft', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
+                              axisLine={false}
+                            />
+                            <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+                            {config.showLegend && <Legend />}
+                            <Scatter 
+                              name="Muestras" 
+                              data={chartData} 
+                              fill={currentPalette.colors[2]} 
+                              shape="circle"
+                            />
+                          </ScatterChart>
+                        )}
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-6 animate-pulse">
@@ -1008,62 +1159,69 @@ const App = () => {
     );
   }
 
-  // HOME VIEW
-  return (
-    <div className="min-h-screen bg-slate-950">
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px] animate-pulse"></div>
-        <div className="absolute bottom-0 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '2s'}}></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '4s'}}></div>
-      </div>
+ // HOME VIEW
+return (
+  <div className="min-h-screen bg-slate-950">
+    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px] animate-pulse"></div>
+      <div className="absolute bottom-0 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '2s'}}></div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '4s'}}></div>
+    </div>
 
-      <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="relative group">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl blur-xl opacity-75 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative bg-gradient-to-br from-indigo-500 to-purple-600 p-2.5 rounded-2xl shadow-2xl">
-                <BarChart3 className="w-7 h-7 text-white" />
+    <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
+      <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="relative group">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full blur-xl opacity-75 group-hover:opacity-100 transition-opacity"></div>
+            <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-indigo-600 to-purple-700 p-0.5 shadow-2xl">
+              <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center overflow-hidden">
+                <img
+                  src={statlabLogo}
+                  alt="StatLab logo"
+                  className="w-full h-full object-cover scale-150 translate-y-0.5"
+                />
               </div>
             </div>
-            <div>
-              <h1 className="text-xl font-black text-white leading-none tracking-tight">StatLab</h1>
-              <p className="text-[10px] text-indigo-400 font-black uppercase tracking-[0.2em]">Research & Analytics</p>
-            </div>
           </div>
-          <div className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-400">
-            <button 
-              onClick={() => {
-                const el = document.getElementById('chapters');
-                el?.scrollIntoView({ behavior: 'smooth' });
-              }}
-              className="hover:text-white transition-colors"
-            >
-              Laboratorios
-            </button>
-            <button 
-              onClick={() => setView('developers')}
-              className="hover:text-white transition-colors"
-            >
-              Desarrolladores
-            </button>
-            <a 
-              href="https://www.udemy.com/course/fundamentos-de-estadistica/" 
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:shadow-2xl hover:shadow-indigo-500/30 transition-all"
-            >
-              Portal Udemy
-            </a>
+          <div>
+            <h1 className="text-xl font-black text-white leading-none tracking-tight">StatLab</h1>
+            <p className="text-[10px] text-indigo-400 font-black uppercase tracking-[0.2em]">Research & Analytics</p>
           </div>
         </div>
-      </header>
+
+        <div className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-400">
+          <button 
+            onClick={() => {
+              const el = document.getElementById('chapters');
+              el?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="hover:text-white transition-colors"
+          >
+            Laboratorios
+          </button>
+          <button 
+            onClick={() => setView('developers')}
+            className="hover:text-white transition-colors"
+          >
+            Desarrolladores
+          </button>
+          <a 
+            href="https://www.udemy.com/course/fundamentos-de-estadistica/" 
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:shadow-2xl hover:shadow-indigo-500/30 transition-all"
+          >
+            Curso Udemy
+          </a>
+        </div>
+      </div>
+    </header>
 
       <section className="relative pt-32 pb-40 overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
           <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 px-5 py-2.5 rounded-full text-[10px] font-black text-indigo-400 mb-12 hover:scale-105 transition-transform">
             <BookOpen className="w-4 h-4" /> 
-            LABORATORIOS INTERACTIVOS
+            LABORATORIOS INTERACTIVOS DEL CURSO DE UDEMY
             <Sparkles className="w-4 h-4 animate-pulse" />
           </div>
           
@@ -1105,7 +1263,7 @@ const App = () => {
         <div className="mb-16">
           <div className="flex items-center gap-2 mb-4">
             <div className="h-px w-12 bg-gradient-to-r from-indigo-500 to-purple-500"></div>
-            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Índice del Libro</span>
+            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Índice del Curso</span>
           </div>
           <h3 className="text-5xl md:text-6xl font-black text-white tracking-tighter mb-4">Capítulos y Laboratorios</h3>
           <p className="text-slate-500 text-lg max-w-2xl font-medium leading-relaxed">
@@ -1195,94 +1353,133 @@ const App = () => {
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-6 mb-40">
-        <div className="relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/20 to-purple-600/20 rounded-[3rem] blur-2xl group-hover:opacity-100 opacity-50 transition-all duration-1000"></div>
-          
-          <div className="relative glass rounded-[3.5rem] p-10 md:p-16 border border-white/10 overflow-hidden bg-slate-900/40">
-            <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
-              <Quote className="w-48 h-48 text-white rotate-12" />
-            </div>
+<section className="max-w-7xl mx-auto px-6 mb-40">
+  <div className="relative group">
+    <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/20 to-purple-600/20 rounded-[3rem] blur-2xl group-hover:opacity-100 opacity-50 transition-all duration-1000"></div>
 
-            <div className="flex flex-col items-center">
-              <div className="flex flex-col items-center mb-10">
-                <div className="relative mb-6">
-                  <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full opacity-20 blur-xl"></div>
-                  <div className="w-28 h-28 rounded-full border-4 border-white/20 p-1 bg-slate-950 relative z-10">
-                    <div className="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                      <BarChart3 className="w-12 h-12 text-white" />
-                    </div>
-                  </div>
-                </div>
-                <h4 className="text-3xl md:text-4xl font-black text-white tracking-tighter mb-2">StatLab Research & Analytics</h4>
-                <div className="px-6 py-2 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-full">
-                  <span className="text-indigo-400 font-black text-[10px] uppercase tracking-[0.3em]">Equipo de Desarrollo</span>
-                </div>
-              </div>
+    <div className="relative glass rounded-[3.5rem] p-10 md:p-16 border border-white/10 overflow-hidden bg-slate-900/40">
+      <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
+        <Quote className="w-48 h-48 text-white rotate-12" />
+      </div>
 
-              <div className="max-w-4xl w-full text-center relative px-10 mb-12">
-                <Quote className="w-6 h-6 text-indigo-500/40 absolute -top-4 left-0 rotate-180" />
-                <p className="text-xl md:text-2xl font-medium text-slate-300 italic leading-relaxed">
-                  "Transformamos datos complejos en conocimiento estadístico mediante herramientas que combinan rigor académico con diseño intuitivo."
-                </p>
-                <Quote className="w-6 h-6 text-purple-500/40 absolute -bottom-4 right-0" />
-              </div>
+      <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center mb-10">
+          <div className="relative mb-6">
+            <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full opacity-20 blur-xl"></div>
 
-              <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-between pt-10 border-t border-white/5 gap-8">
-                <div className="flex gap-16">
-                  <div className="space-y-1">
-                    <p className="text-4xl font-black text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text">13+</p>
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Capítulos</p>
-                  </div>
-                  <div className="space-y-1 relative pl-8 border-l border-white/5">
-                    <p className="text-4xl font-black text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text">50+</p>
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Laboratorios</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4">
-                  <a href="mailto:soporte@statlabresearch.mx" className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:scale-105 transition-all">
-                    <Mail className="w-4 h-4 text-indigo-400" />
-                    <span className="text-xs font-black uppercase text-slate-300">Soporte</span>
-                  </a>
-                  <button 
-                    onClick={() => setView('developers')}
-                    className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 hover:scale-105 transition-all"
-                  >
-                    <Users className="w-4 h-4 text-indigo-400" />
-                    <span className="text-xs font-black uppercase text-indigo-400">Equipo</span>
-                  </button>
-                </div>
+            <div className="w-28 h-28 rounded-full border-4 border-white/20 p-1 bg-slate-950 relative z-10">
+              <div className="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center">
+                <img
+                  src={statlabLogo}
+                  alt="StatLab logo"
+                  className="w-full h-full object-cover scale-150 translate-y-1"
+                  draggable={false}
+                />
               </div>
             </div>
           </div>
-        </div>
-      </section>
 
-      <footer className="bg-slate-950 border-t border-white/5 py-12">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-10">
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl">
-                  <BarChart3 className="text-white w-6 h-6" />
-                </div>
-                <div>
-                  <span className="font-black text-lg text-white tracking-tight block">StatLab</span>
-                  <span className="text-[9px] text-indigo-400 font-black uppercase tracking-widest">Research & Analytics</span>
-                </div>
-              </div>
-              <p className="text-slate-500 text-sm leading-relaxed">
-                Herramienta especializada en análisis estadístico para educación y desarrollo profesional.
+          <h4 className="text-3xl md:text-4xl font-black text-white tracking-tighter mb-2">
+            StatLab Research & Analytics
+          </h4>
+          <div className="px-6 py-2 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-full">
+            <span className="text-indigo-400 font-black text-[10px] uppercase tracking-[0.3em]">
+              Equipo de Desarrollo
+            </span>
+          </div>
+        </div>
+
+        <div className="max-w-4xl w-full text-center relative px-10 mb-12">
+          <Quote className="w-6 h-6 text-indigo-500/40 absolute -top-4 left-0 rotate-180" />
+          <p className="text-xl md:text-2xl font-medium text-slate-300 italic leading-relaxed">
+            "Transformamos datos complejos en conocimiento estadístico mediante herramientas que combinan rigor académico con diseño intuitivo."
+          </p>
+          <Quote className="w-6 h-6 text-purple-500/40 absolute -bottom-4 right-0" />
+        </div>
+
+        <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-between pt-10 border-t border-white/5 gap-8">
+          <div className="flex gap-16">
+            <div className="space-y-1">
+              <p className="text-4xl font-black text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text">
+                13+
+              </p>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                Capítulos
               </p>
             </div>
+            <div className="space-y-1 relative pl-8 border-l border-white/5">
+              <p className="text-4xl font-black text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text">
+                50+
+              </p>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                Laboratorios
+              </p>
+            </div>
+          </div>
+
+          <div className="flex gap-4">
+            <a
+              href="mailto:statlabresearch2025@gmail.com"
+              className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:scale-105 transition-all"
+            >
+              <Mail className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs font-black uppercase text-slate-300">
+                Soporte
+              </span>
+            </a>
+            <button
+              onClick={() => setView('developers')}
+              className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 hover:scale-105 transition-all"
+            >
+              <Users className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs font-black uppercase text-indigo-400">
+                Equipo
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer className="bg-slate-950 border-t border-white/5 py-12">
+  <div className="max-w-7xl mx-auto px-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-10">
+      <div>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 p-0.5 shadow-xl">
+            <div className="w-full h-full rounded-xl bg-slate-950 flex items-center justify-center overflow-hidden">
+              <img
+                src={statlabLogo}
+                alt="StatLab logo"
+                className="w-full h-full object-cover scale-150 translate-y-0.5"
+                draggable={false}
+              />
+            </div>
+          </div>
+
+          <div>
+            <span className="font-black text-lg text-white tracking-tight block">
+              StatLab
+            </span>
+            <span className="text-[9px] text-indigo-400 font-black uppercase tracking-widest">
+              Research & Analytics
+            </span>
+          </div>
+        </div>
+
+        <p className="text-slate-500 text-sm leading-relaxed">
+          Herramienta especializada en análisis estadístico para educación y desarrollo profesional.
+        </p>
+      </div>
 
             <div>
               <h3 className="text-white font-black text-sm uppercase tracking-wider mb-4">Contacto</h3>
               <div className="space-y-3">
-                <a href="mailto:soporte@statlabresearch.mx" className="flex items-center gap-2 text-slate-400 hover:text-indigo-400 transition-colors text-sm">
+                <a href="mailto:statlabresearch2025@gmail.com" className="flex items-center gap-2 text-slate-400 hover:text-indigo-400 transition-colors text-sm">
                   <Mail className="w-4 h-4" />
-                  soporte@statlabresearch.mx
+                  statlabresearch2025@gmail.com
                 </a>
                 <a href="https://statlabresearch.mx" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-slate-400 hover:text-indigo-400 transition-colors text-sm">
                   <Database className="w-4 h-4" />
