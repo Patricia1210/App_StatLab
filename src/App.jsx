@@ -649,7 +649,7 @@ const App = () => {
                 },
                 {
                   q: "¿Qué formato deben tener mis datos?",
-                  a: "Los archivos deben estar en formato CSV (valores separados por comas). Cada laboratorio incluye datasets de ejemplo en los recursos de Udemy."
+                  a: "Los archivos deben estar en formato CSV (valores separados por comas). Desde Excel puedes exportar tus archivos a formato CSV. Cada laboratorio incluye datasets de ejemplo en los recursos de Udemy."
                 },
                 {
                   q: "¿Puedo usar mis propios datos?",
@@ -709,12 +709,19 @@ const App = () => {
       </div>
     );
   }
-
+// ========================================
+  // INICIO: LABORATORIO SECCIÓN 0.2
+  // Laboratorio de prácticas (presentación)
+  // ========================================
+  
   // LAB VIEW
   if (view === 'lab' && activeSectionData) {
     const currentPalette = PALETTES[config.colorPalette];
     const currentBgColor = BACKGROUND_COLORS[config.backgroundColor];
     const isLightBg = ['white', 'cream'].includes(config.backgroundColor);
+    
+    // ✅ CAMBIO 1: Settings visibles por defecto solo en sección 0.2
+    const shouldShowSettingsByDefault = selectedSection === '0.2';
     
     return (
       <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -824,7 +831,8 @@ const App = () => {
                   </div>
                 </div>
 
-                {data.length > 0 && showSettings && (
+                {/* ✅ CAMBIO 1: Mostrar settings por defecto en 0.2 */}
+                {data.length > 0 && (shouldShowSettingsByDefault || showSettings) && (
                   <div className="space-y-4 pt-4 border-t border-white/5">
                     <div className="space-y-2">
                       <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Título del Gráfico</label>
@@ -841,19 +849,21 @@ const App = () => {
                       <label className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
                         <Database className="w-3 h-3" /> Eje X
                       </label>
+                      {/* ✅ CORREGIDO: Auto-completar label al cambiar variable */}
                       <select 
                         value={config.xAxis} 
-                        onChange={(e) => setConfig({...config, xAxis: e.target.value})} 
+                        onChange={(e) => setConfig({...config, xAxis: e.target.value, xAxisLabel: e.target.value})} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                       >
                         {columns.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
+                      {/* ✅ Campo editable para título del Eje X */}
                       <input
                         type="text"
-                        value={config.xAxisLabel}
+                        value={config.xAxisLabel || config.xAxis}
                         onChange={(e) => setConfig({...config, xAxisLabel: e.target.value})}
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
-                        placeholder="Nombre del eje X"
+                        placeholder="Título del eje X"
                       />
                     </div>
                     
@@ -861,19 +871,21 @@ const App = () => {
                       <label className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
                         <TrendingUp className="w-3 h-3" /> Eje Y
                       </label>
+                      {/* ✅ CORREGIDO: Auto-completar label al cambiar variable */}
                       <select 
                         value={config.yAxis} 
-                        onChange={(e) => setConfig({...config, yAxis: e.target.value})} 
+                        onChange={(e) => setConfig({...config, yAxis: e.target.value, yAxisLabel: e.target.value})} 
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                       >
                         {columns.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
+                      {/* ✅ Campo editable para título del Eje Y */}
                       <input
                         type="text"
-                        value={config.yAxisLabel}
+                        value={config.yAxisLabel || config.yAxis}
                         onChange={(e) => setConfig({...config, yAxisLabel: e.target.value})}
                         className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
-                        placeholder="Nombre del eje Y"
+                        placeholder="Título del eje Y"
                       />
                     </div>
 
@@ -1005,28 +1017,28 @@ const App = () => {
                       {config.chartTitle}
                     </h4>
                     <div style={{ width: '100%', height: '480px' }}>
-                      <ResponsiveContainer>
+                      {/* ✅ TODOS LOS PROBLEMAS CORREGIDOS */}
+                      <ResponsiveContainer width="100%" height="100%">
                         {config.chartType === 'bar' ? (
-                          <BarChart data={chartData}>
+                          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                             {config.showGrid && <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
                             <XAxis 
                               dataKey={config.xAxis}
-                              label={{ value: config.xAxisLabel, position: 'insideBottom', offset: -5, fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              label={{ value: config.xAxisLabel || config.xAxis, position: 'insideBottom', offset: -10, style: { fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontSize: 11, fontWeight: 700}} 
                               axisLine={false} 
                               tickLine={false}
                               angle={-30}
                               textAnchor="end"
-                              height={80}
+                              height={70}
                             />
                             <YAxis 
-                              label={{ value: config.yAxisLabel, angle: -90, position: 'insideLeft', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              label={{ value: config.yAxisLabel || config.yAxis, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontSize: 11, fontWeight: 700}} 
                               axisLine={false} 
                               tickLine={false}
                             />
                             <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(99, 102, 241, 0.1)'}} />
-                            {config.showLegend && <Legend wrapperStyle={{paddingTop: '20px'}} />}
                             <Bar 
                               dataKey={config.yAxis}
                               radius={[12, 12, 0, 0]} 
@@ -1039,24 +1051,23 @@ const App = () => {
                             </Bar>
                           </BarChart>
                         ) : config.chartType === 'line' ? (
-                          <LineChart data={chartData}>
+                          <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                             {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
                             <XAxis 
                               dataKey={config.xAxis}
-                              label={{ value: config.xAxisLabel, position: 'insideBottom', offset: -5, fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              label={{ value: config.xAxisLabel || config.xAxis, position: 'insideBottom', offset: -10, style: { fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
                               axisLine={false}
                               angle={-30}
                               textAnchor="end"
-                              height={80}
+                              height={70}
                             />
                             <YAxis 
-                              label={{ value: config.yAxisLabel, angle: -90, position: 'insideLeft', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              label={{ value: config.yAxisLabel || config.yAxis, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
-                              axisLine={false} 
+                              axisLine={false}
                             />
                             <Tooltip content={<CustomTooltip />} />
-                            {config.showLegend && <Legend />}
                             <Line 
                               type="monotone" 
                               dataKey={config.yAxis} 
@@ -1068,24 +1079,23 @@ const App = () => {
                             />
                           </LineChart>
                         ) : (
-                          <ScatterChart>
+                          <ScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                             {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
                             <XAxis 
                               dataKey={config.xAxis} 
-                              name={config.xAxisLabel}
-                              label={{ value: config.xAxisLabel, position: 'insideBottom', offset: -5, fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              name={config.xAxisLabel || config.xAxis}
+                              label={{ value: config.xAxisLabel || config.xAxis, position: 'insideBottom', offset: -10, style: { fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
                               axisLine={false}
                             />
                             <YAxis 
                               dataKey={config.yAxis} 
-                              name={config.yAxisLabel}
-                              label={{ value: config.yAxisLabel, angle: -90, position: 'insideLeft', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700 }}
+                              name={config.yAxisLabel || config.yAxis}
+                              label={{ value: config.yAxisLabel || config.yAxis, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
                               tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
                               axisLine={false}
                             />
                             <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-                            {config.showLegend && <Legend />}
                             <Scatter 
                               name="Muestras" 
                               data={chartData} 
@@ -1158,7 +1168,10 @@ const App = () => {
       </div>
     );
   }
-
+  
+  // ========================================
+  // FIN: LABORATORIO SECCIÓN 0.2
+  // ========================================
  // HOME VIEW
 return (
   <div className="min-h-screen bg-slate-950">
@@ -1249,7 +1262,7 @@ return (
               Ver Capítulos
             </button>
             <a 
-              href="mailto:lca1643@gmail.com"
+              href="mailto:statlabresearch2025@gmail.com"
               className="w-full sm:w-auto glass-hover border border-white/10 px-12 py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all hover:scale-105 flex items-center justify-center gap-3 group text-white hover:bg-white/5"
             >
               Contacto
