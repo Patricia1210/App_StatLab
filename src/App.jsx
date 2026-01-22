@@ -1,18 +1,18 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  BarChart3, Calculator, TrendingUp, Mail, ChevronRight, Play, Upload, FileJson, 
-  CheckCircle2, Info, ArrowRight, Database, Quote, Share2, Download,
-  Sparkles, RefreshCw, Eye, EyeOff, Settings, BookOpen, Layers, Activity,
-  PieChart, TrendingDown, Target, ChevronDown, Users
+import {
+  BarChart3, Calculator, TrendingUp, Mail, Play,
+  CheckCircle2, ArrowRight, Database, Quote, Share2,
+  Sparkles, BookOpen, Layers, Activity, PieChart,
+  TrendingDown, Target, ChevronDown, Users
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  Cell, LineChart, Line, ScatterChart, Scatter, Legend
-} from 'recharts';
 
 import statlabLogo from './assets/logo-statlab.png';
+import LabRenderer from "./labs/LabRenderer";
+import Lab0_2 from "./labs/chapter0/Lab0_2";
 
-// Estructura basada en el libro "Estadística_01.pdf"
+// ============================================================
+// ESTRUCTURA DEL CURSO
+// ============================================================
 const BOOK_STRUCTURE = [
   {
     chapter: 0,
@@ -32,8 +32,6 @@ const BOOK_STRUCTURE = [
     sections: [
       { id: "1.1", title: "Definición de estadística", hasLab: false },
       { id: "1.2", title: "La población y la muestra", hasLab: true },
-      { id: "1.3", title: "Ramas de la estadística", hasLab: true },
-      { id: "1.4", title: "Estadística con Python", hasLab: true }
     ]
   },
   {
@@ -205,14 +203,14 @@ const App = () => {
   const [view, setView] = useState('home');
   const [selectedSection, setSelectedSection] = useState(null);
   const [expandedChapter, setExpandedChapter] = useState(null);
+
   const [data, setData] = useState([]);
   const [columns, setColumns] = useState([]);
   const [fileName, setFileName] = useState(null);
   const [copySuccess, setCopySuccess] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showStats, setShowStats] = useState(true);
-  
+
   const [config, setConfig] = useState({
     xAxis: '',
     yAxis: '',
@@ -240,58 +238,53 @@ const App = () => {
     if (!selectedSection) return null;
     for (const chapter of BOOK_STRUCTURE) {
       const section = chapter.sections.find(s => s.id === selectedSection);
-      if (section) {
-        return { ...section, chapter };
-      }
+      if (section) return { ...section, chapter };
     }
     return null;
   }, [selectedSection]);
 
   const handleFileUpload = (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  
-  setIsUploading(true);
-  setFileName(file.name);
-  
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    setTimeout(() => {
-      const text = e.target?.result;
-      const lines = text.split('\n').filter(line => line.trim());
-      
-      if (lines.length > 0) {
-        const headers = lines[0].split(',').map(h => h.trim());
-        const parsedData = lines.slice(1).map((line, index) => {
-          const values = line.split(',').map(v => v.trim());
-          const row = { id: index };
-          headers.forEach((header, i) => {
-            row[header] = values[i];
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setTimeout(() => {
+        const text = e.target?.result || "";
+        const lines = String(text).split('\n').filter(line => line.trim());
+
+        if (lines.length > 0) {
+          const headers = lines[0].split(',').map(h => h.trim());
+          const parsedData = lines.slice(1).map((line, index) => {
+            const values = line.split(',').map(v => v.trim());
+            const row = { id: index };
+            headers.forEach((header, i) => {
+              row[header] = values[i];
+            });
+            return row;
           });
-          return row;
-        });
-        
-        setData(parsedData);
-        setColumns(headers);
-        
-        // ✅ CORRECCIÓN CRÍTICA: NO asignar xAxis ni yAxis automáticamente
-        setConfig(prev => ({ 
-          ...prev, 
-          // ❌ ELIMINADO: xAxis: headers[0],
-          // ❌ ELIMINADO: yAxis: headers[1] || headers[0],
-          // ✅ NUEVO: Dejar los ejes vacíos para que el usuario los seleccione
-          xAxis: '',
-          yAxis: '',
-          xAxisLabel: '',
-          yAxisLabel: '',
-          chartTitle: `Sección ${selectedSection}: ${activeSectionData?.title || 'Análisis'}`
-        }));
-      }
-      setIsUploading(false);
-    }, 800);
+
+          setData(parsedData);
+          setColumns(headers);
+
+          setConfig(prev => ({
+            ...prev,
+            xAxis: '',
+            yAxis: '',
+            xAxisLabel: '',
+            yAxisLabel: '',
+            chartTitle: `Sección ${selectedSection}: ${activeSectionData?.title || 'Análisis'}`
+          }));
+        }
+
+        setIsUploading(false);
+      }, 800);
+    };
+    reader.readAsText(file);
   };
-  reader.readAsText(file);
-};
 
   const copyToClipboard = (sectionId) => {
     const url = `${window.location.origin}${window.location.pathname}?section=${sectionId}`;
@@ -301,6 +294,7 @@ const App = () => {
   };
 
   const chartData = useMemo(() => {
+    if (!config.yAxis) return data;
     return data.map(row => ({
       ...row,
       [config.yAxis]: parseFloat(String(row[config.yAxis])) || 0
@@ -309,18 +303,20 @@ const App = () => {
 
   const stats = useMemo(() => {
     if (!data.length || !config.yAxis) return null;
-    const values = data.map(d => parseFloat(String(d[config.yAxis]))).filter(v => !isNaN(v));
+    const values = data
+      .map(d => parseFloat(String(d[config.yAxis])))
+      .filter(v => !isNaN(v));
     if (!values.length) return null;
-    
+
     const sum = values.reduce((a, b) => a + b, 0);
     const mean = sum / values.length;
     const sorted = [...values].sort((a, b) => a - b);
-    const median = sorted.length % 2 === 0 
+    const median = sorted.length % 2 === 0
       ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
       : sorted[Math.floor(sorted.length / 2)];
     const variance = values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / values.length;
     const stdDev = Math.sqrt(variance);
-    
+
     return {
       mean: mean.toFixed(2),
       median: median.toFixed(2),
@@ -344,11 +340,13 @@ const App = () => {
     canvas.height = 900;
 
     img.onload = () => {
-      const bgColor = BACKGROUND_COLORS[config.backgroundColor].color;
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 50, 50, canvas.width - 100, canvas.height - 100);
-      
+      const bgColor = BACKGROUND_COLORS[config.backgroundColor]?.color || "#020617";
+      if (ctx) {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 50, 50, canvas.width - 100, canvas.height - 100);
+      }
+
       const link = document.createElement('a');
       link.download = `Seccion_${selectedSection}_${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png', 1.0);
@@ -360,18 +358,27 @@ const App = () => {
 
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
+      const xKey = config.xAxis;
       return (
         <div className="bg-slate-900/95 backdrop-blur-xl border border-white/20 rounded-2xl p-4 shadow-2xl shadow-indigo-500/20">
-          <p className="text-white font-bold text-sm mb-2">{payload[0].payload[config.xAxis]}</p>
-          <p className="text-indigo-400 font-black text-2xl">{payload[0].value.toFixed(2)}</p>
-          <p className="text-slate-500 text-xs mt-1 font-semibold uppercase tracking-wider">{config.yAxis}</p>
+          <p className="text-white font-bold text-sm mb-2">
+            {xKey ? payload[0].payload?.[xKey] : "Dato"}
+          </p>
+          <p className="text-indigo-400 font-black text-2xl">
+            {Number(payload[0].value).toFixed(2)}
+          </p>
+          <p className="text-slate-500 text-xs mt-1 font-semibold uppercase tracking-wider">
+            {config.yAxis || "Y"}
+          </p>
         </div>
       );
     }
     return null;
   };
 
+  // ============================================================
   // DEVELOPERS VIEW
+  // ============================================================
   if (view === 'developers') {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -384,17 +391,17 @@ const App = () => {
         <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
           <div className="max-w-7xl mx-auto px-6 py-4">
             <div className="flex items-center justify-between">
-              <button 
+              <button
                 onClick={() => {
                   setView('home');
                   window.history.pushState({}, '', window.location.pathname);
-                }} 
+                }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
               >
-                <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" /> 
+                <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
                 Volver al Inicio
               </button>
-              
+
               <div className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/20 rounded-xl">
                 <Users className="w-5 h-5 text-purple-400" />
                 <span className="text-xs text-purple-400 font-black uppercase tracking-wider">Equipo Core</span>
@@ -435,7 +442,7 @@ const App = () => {
                     "La estadística no miente, solo espera ser interpretada por los ojos correctos."
                   </p>
                 </div>
-                <a 
+                <a
                   href="mailto:lca1643@gmail.com"
                   className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all group/btn"
                 >
@@ -466,7 +473,7 @@ const App = () => {
                     "Creamos herramientas que transforman datos complejos en decisiones estratégicas."
                   </p>
                 </div>
-                <a 
+                <a
                   href="mailto:phc.research.analytics@gmail.com"
                   className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all group/btn"
                 >
@@ -480,7 +487,7 @@ const App = () => {
           <div className="glass rounded-3xl p-10 border-l-4 border-l-indigo-500">
             <h2 className="text-2xl font-black text-white mb-6">Sobre el Equipo</h2>
             <p className="text-slate-400 leading-relaxed mb-6">
-              StatLab Research & Analytics es el resultado de la colaboración entre especialistas en estadística aplicada y desarrollo de software. 
+              StatLab Research & Analytics es el resultado de la colaboración entre especialistas en estadística aplicada y desarrollo de software.
               Nuestro objetivo es democratizar el análisis de datos mediante herramientas accesibles, precisas y elegantes.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -502,7 +509,7 @@ const App = () => {
           <div className="glass rounded-3xl p-10 border border-indigo-500/20 text-center">
             <h3 className="text-2xl font-black text-white mb-4">¿Tienes preguntas o sugerencias?</h3>
             <p className="text-slate-400 mb-6">Nuestro equipo está disponible para ayudarte</p>
-            <a 
+            <a
               href="mailto:statlabresearch2025@gmail.com"
               className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider hover:shadow-2xl hover:shadow-indigo-500/50 transition-all hover:scale-105"
             >
@@ -515,766 +522,238 @@ const App = () => {
     );
   }
 
-  // WELCOME VIEW (Sección 0.1)
-  if (view === 'lab' && selectedSection === '0.1') {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-200">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-indigo-500/10 rounded-full blur-[150px] animate-pulse"></div>
-          <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '2s'}}></div>
-          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '4s'}}></div>
+  // ============================================================
+  // LABS ROUTER (ÚNICO)  ✅ (con navegación consistente + props a labs)
+  // ============================================================
+
+  const goHome = (e) => {
+    // ✅ por si el botón vive dentro de <form> o <a>
+    if (e?.preventDefault) e.preventDefault();
+    if (e?.stopPropagation) e.stopPropagation();
+
+    setView("home");
+    setSelectedSection(null);
+
+    // ✅ limpiar querystring
+    window.history.pushState({}, "", window.location.pathname);
+
+    // ✅ reset scroll
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const goToSection = (sectionId, e) => {
+    if (e?.preventDefault) e.preventDefault();
+    if (e?.stopPropagation) e.stopPropagation();
+
+    setSelectedSection(sectionId);
+    setView("lab");
+
+    window.history.pushState({}, "", `?section=${sectionId}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  if (view === "lab") {
+    // 0.1 Bienvenida (LabRenderer)
+    if (selectedSection === "0.1") {
+  return (
+    <LabRenderer
+      labKey="chapter0/Lab0_1"
+      fallback={
+        <div className="min-h-screen bg-slate-950 text-slate-200 p-10">
+          <h2 className="text-2xl font-black text-white">Cargando…</h2>
         </div>
+      }
+      // ✅ CORRECTO: props directas (sin objeto "props")
+      goHome={goHome}
+      goToSection={goToSection}
+      setView={setView}
+      setSelectedSection={setSelectedSection}
+      selectedSection={selectedSection}
+      activeSectionData={activeSectionData}
+    />
+  );
+}
 
-        <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
-              <button 
-                onClick={() => {
-                  setView('home');
-                  window.history.pushState({}, '', window.location.pathname);
-                }} 
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
-              >
-                <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" /> 
-                Volver al Índice
-              </button>
-              
-              <div className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-                <Sparkles className="w-5 h-5 text-indigo-400 animate-pulse" />
-                <span className="text-xs text-indigo-400 font-black uppercase tracking-wider">Bienvenida</span>
-              </div>
-            </div>
-          </div>
-        </nav>
+    // 0.2 Presentación (Lab0_2 directo)
+    if (selectedSection === "0.2" && activeSectionData) {
+      return (
+        <Lab0_2
+          // ✅ agrega goHome / goToSection para que los botones funcionen igual
+          goHome={goHome}
+          goToSection={goToSection}
+          setView={setView}
+          setSelectedSection={setSelectedSection}
+          selectedSection={selectedSection}
+          activeSectionData={activeSectionData}
+          data={data}
+          columns={columns}
+          fileName={fileName}
+          isUploading={isUploading}
+          handleFileUpload={handleFileUpload}
+          config={config}
+          setConfig={setConfig}
+          chartData={chartData}
+          stats={stats}
+          showStats={showStats}
+          setShowStats={setShowStats}
+          PALETTES={PALETTES}
+          BACKGROUND_COLORS={BACKGROUND_COLORS}
+          downloadChart={downloadChart}
+          CustomTooltip={CustomTooltip}
+        />
+      );
+    }
+    
+        // 1.1 Definición de estadística (LabRenderer)
+    if (selectedSection === "1.1") {
+      return (
+        <LabRenderer
+        labKey="chapter1/Lab1_1"
+        fallback={
+        <div className="min-h-screen bg-slate-950 text-slate-200 p-10">
+           <h2 className="text-2xl font-black text-white">Cargando…</h2>
+        </div>
+      }
+      goHome={goHome}
+      goToSection={goToSection}
+      setView={setView}
+      setSelectedSection={setSelectedSection}
+      selectedSection={selectedSection}
+      activeSectionData={activeSectionData}
+    />
+  );
+  }
+    
+    // 1.2 Población y muestra (LabRenderer)
+if (selectedSection === "1.2") {
+  return (
+    <LabRenderer
+      labKey="chapter1/Lab1_2"
+      fallback={
+      <div className="min-h-screen bg-slate-950 text-slate-200 p-10">
+         <h2 className="text-2xl font-black text-white">Cargando…</h2>
+      </div>
+    }
+    goHome={goHome}
+    goToSection={goToSection}
+    setView={setView}
+ />
+);
+}
 
-        <main className="max-w-5xl mx-auto px-6 py-16 space-y-12 relative">
-          <div className="text-center space-y-6">
-            <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-2xl shadow-indigo-500/30 mb-6">
-              <BookOpen className="w-12 h-12 text-white" />
-            </div>
-            <h1 className="text-5xl md:text-6xl font-black text-white tracking-tight leading-tight">
-              ¡Bienvenido al <br/>
-              <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Laboratorio de Estadística!
-              </span>
-            </h1>
-            <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
-              Este es tu espacio interactivo para practicar todos los conceptos del curso de Fundamentos de Estadística.
-            </p>
-          </div>
+    // Cualquier otra sección aún no conectada
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-6">
+        <div className="glass rounded-3xl p-8 border border-white/10 max-w-xl w-full text-center">
+          <p className="text-white font-black text-xl mb-2">Laboratorio en construcción</p>
+          <p className="text-slate-400 font-medium">
+            La sección <span className="text-indigo-400 font-black">{selectedSection}</span> aún no está conectada.
+          </p>
 
-          <div className="glass rounded-3xl p-10 border border-white/10 space-y-8">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                <Info className="w-6 h-6 text-white" />
-              </div>
-              <h2 className="text-3xl font-black text-white">Guía de Uso</h2>
-            </div>
+          <button
+            type="button"                 // ✅ evita submit accidental si hay <form>
+            onClick={goHome}              // ✅ usa el handler único
+            className="mt-6 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 font-bold text-sm"
+          >
+            Volver al índice
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-            <div className="space-y-6">
-              {[
-                {
-                  step: "1",
-                  title: "Sigue el curso en Udemy",
-                  description: "Cada lección del curso tiene un laboratorio correspondiente aquí.",
-                  icon: <Play className="w-5 h-5" />
-                },
-                {
-                  step: "2",
-                  title: "Descarga los datasets",
-                  description: "En la sección de recursos de cada clase de Udemy encontrarás los archivos CSV necesarios.",
-                  icon: <Download className="w-5 h-5" />
-                },
-                {
-                  step: "3",
-                  title: "Accede al laboratorio correspondiente",
-                  description: "Busca el capítulo y sección que corresponda a tu clase actual en el índice principal.",
-                  icon: <Database className="w-5 h-5" />
-                },
-                {
-                  step: "4",
-                  title: "Sube tus datos y analiza",
-                  description: "Carga el archivo CSV en el laboratorio, configura los ejes y genera tus visualizaciones.",
-                  icon: <TrendingUp className="w-5 h-5" />
-                }
-              ].map((item, i) => (
-                <div key={i} className="flex gap-6 p-6 rounded-2xl bg-slate-900/50 border border-white/5 hover:border-indigo-500/30 hover:bg-slate-900 transition-all group">
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-black text-white text-xl shadow-lg group-hover:scale-110 transition-transform">
-                      {item.step}
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="text-indigo-400">{item.icon}</div>
-                      <h3 className="text-lg font-black text-white">{item.title}</h3>
-                    </div>
-                    <p className="text-slate-400 leading-relaxed">{item.description}</p>
-                  </div>
+  // ============================================================
+  // HOME VIEW
+  // ============================================================
+  return (
+    <div className="min-h-screen bg-slate-950">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-0 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '4s' }}></div>
+      </div>
+
+      <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full blur-xl opacity-75 group-hover:opacity-100 transition-opacity"></div>
+              <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-indigo-600 to-purple-700 p-0.5 shadow-2xl">
+                <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={statlabLogo}
+                    alt="StatLab logo"
+                    className="w-full h-full object-cover scale-150 translate-y-0.5"
+                  />
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="glass rounded-3xl p-10 border-l-4 border-l-purple-500 relative overflow-hidden group hover:shadow-2xl hover:shadow-purple-500/10 transition-all">
-            <div className="absolute top-0 right-0 p-8 opacity-5">
-              <Play className="w-32 h-32" />
-            </div>
-            <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-              <div>
-                <h3 className="text-2xl font-black text-white mb-2">¿Aún no estás inscrito en el curso?</h3>
-                <p className="text-slate-400 leading-relaxed">
-                  Accede al curso completo de Fundamentos de Estadística en Udemy con clases en video, ejercicios y recursos descargables.
-                </p>
               </div>
-              <a 
-                href="https://www.udemy.com/course/fundamentos-de-estadistica/" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-shrink-0 flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider hover:shadow-2xl hover:shadow-purple-500/50 transition-all hover:scale-105 group"
-              >
-                <Play className="w-5 h-5 fill-current" />
-                Ir al Curso en Udemy
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </a>
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-white leading-none tracking-tight">StatLab</h1>
+              <p className="text-[10px] text-indigo-400 font-black uppercase tracking-[0.2em]">Research & Analytics</p>
             </div>
           </div>
 
-          <div className="glass rounded-3xl p-10 border border-white/10">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
-                <Info className="w-6 h-6 text-white" />
-              </div>
-              <h2 className="text-3xl font-black text-white">Preguntas Frecuentes</h2>
-            </div>
-
-            <div className="space-y-4">
-              {[
-                {
-                  q: "¿Necesito instalar algo para usar los laboratorios?",
-                  a: "No, los laboratorios funcionan 100% en línea desde tu navegador. Solo necesitas los archivos CSV que descargarás de Udemy."
-                },
-                {
-                  q: "¿Qué formato deben tener mis datos?",
-                  a: "Los archivos deben estar en formato CSV (valores separados por comas). Desde Excel puedes exportar tus archivos a formato CSV. Cada laboratorio incluye datasets de ejemplo en los recursos de Udemy."
-                },
-                {
-                  q: "¿Puedo usar mis propios datos?",
-                  a: "¡Por supuesto! Puedes cargar cualquier archivo CSV con tus propios datos para experimentar y practicar."
-                },
-                {
-                  q: "¿Los laboratorios guardan mi progreso?",
-                  a: "Actualmente los laboratorios no guardan progreso. Te recomendamos descargar tus gráficos cuando termines cada análisis."
-                },
-                {
-                  q: "¿Qué navegadores son compatibles?",
-                  a: "Los laboratorios funcionan en Chrome, Firefox, Safari y Edge actualizados. Recomendamos Chrome para mejor rendimiento."
-                },
-                {
-                  q: "¿Puedo compartir el enlace de un laboratorio específico?",
-                  a: "Sí, cada laboratorio tiene un botón para copiar su enlace directo. Así puedes marcarlo o compartirlo fácilmente."
-                }
-              ].map((faq, i) => (
-                <details key={i} className="group/faq p-6 rounded-2xl bg-slate-900/50 border border-white/5 hover:border-emerald-500/30 hover:bg-slate-900 transition-all">
-                  <summary className="font-bold text-white cursor-pointer list-none flex items-center justify-between">
-                    <span className="flex items-center gap-3">
-                      <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs font-black">
-                        {i + 1}
-                      </span>
-                      {faq.q}
-                    </span>
-                    <ChevronDown className="w-5 h-5 text-slate-400 group-open/faq:rotate-180 transition-transform" />
-                  </summary>
-                  <p className="mt-4 text-slate-400 leading-relaxed pl-9">
-                    {faq.a}
-                  </p>
-                </details>
-              ))}
-            </div>
-          </div>
-
-          <div className="text-center space-y-6 pt-8">
-            <p className="text-xl text-slate-300 font-bold">
-              ¿Listo para comenzar?
-            </p>
+          <div className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-400">
             <button
               onClick={() => {
-                setView('home');
-                window.history.pushState({}, '', window.location.pathname);
-                setTimeout(() => {
-                  document.getElementById('chapters')?.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
+                const el = document.getElementById('chapters');
+                el?.scrollIntoView({ behavior: 'smooth' });
               }}
-              className="px-10 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider hover:shadow-2xl hover:shadow-indigo-500/50 transition-all hover:scale-105 inline-flex items-center gap-3"
+              className="hover:text-white transition-colors"
             >
-              <BarChart3 className="w-5 h-5" />
-              Explorar Laboratorios
-              <ArrowRight className="w-5 h-5" />
+              Laboratorios
             </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
-// ========================================
-  // INICIO: LABORATORIO SECCIÓN 0.2
-  // Laboratorio de prácticas (presentación)
-  // ========================================
-  
-  // LAB VIEW
-  if (view === 'lab' && activeSectionData) {
-    const currentPalette = PALETTES[config.colorPalette];
-    const currentBgColor = BACKGROUND_COLORS[config.backgroundColor];
-    const isLightBg = ['white', 'cream'].includes(config.backgroundColor);
-    
-    // ✅ CAMBIO 1: Settings visibles por defecto solo en sección 0.2
-    const shouldShowSettingsByDefault = selectedSection === '0.2';
-    
-    // ✅ NUEVO: Verificar si hay variables seleccionadas para mostrar el gráfico
-    const hasSelectedVariables = config.xAxis && config.yAxis;
-    
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-200">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-96 h-96 bg-indigo-500/10 rounded-full blur-[150px] animate-pulse"></div>
-          <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '2s'}}></div>
-          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '4s'}}></div>
-        </div>
-
-        <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
-              <button 
-                onClick={() => {
-                  setView('home');
-                  window.history.pushState({}, '', window.location.pathname);
-                }} 
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
-              >
-                <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" /> 
-                Volver al Índice
-              </button>
-              
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-r ${activeSectionData.chapter.color} flex items-center justify-center shadow-lg`}>
-                  <div className="scale-75 text-white">{activeSectionData.chapter.icon}</div>
-                </div>
-                <div>
-                  <span className="text-xs text-indigo-400 font-bold block">Capítulo {activeSectionData.chapter.chapter}</span>
-                  <span className="font-black tracking-tight text-white block text-sm">{activeSectionData.chapter.title}</span>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
-                <span className="text-xs text-indigo-400 font-black uppercase tracking-wider">Lab {selectedSection}</span>
-              </div>
-            </div>
-          </div>
-        </nav>
-
-        <main className="max-w-7xl mx-auto px-6 py-10 space-y-8 relative">
-          <section className="glass rounded-3xl p-8 border-l-4 border-l-indigo-500 relative overflow-hidden group hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500">
-            <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
-              <BookOpen className="w-32 h-32" />
-            </div>
-            <div className="flex items-start gap-6 relative z-10">
-              <div className="p-4 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-2xl border border-indigo-500/30 shrink-0">
-                <Info className="w-8 h-8 text-indigo-400" />
-              </div>
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="text-xs font-black text-indigo-500 uppercase tracking-wider bg-indigo-500/10 px-3 py-1 rounded-full">
-                    Sección {selectedSection}
-                  </span>
-                </div>
-                <h2 className="text-2xl font-black text-white mb-2 tracking-tight">{activeSectionData.title}</h2>
-                <p className="text-slate-400 leading-relaxed max-w-3xl font-medium">
-                  Bienvenido al laboratorio práctico de la sección <strong className="text-white">{selectedSection}</strong>. 
-                  Carga el dataset correspondiente desde los recursos del curso para comenzar el análisis.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-4 space-y-6">
-              <div className="glass rounded-3xl p-6 space-y-6 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500">
-                {/* ✅ ELIMINADO: Botón del engrane que ya no sirve */}
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-black flex items-center gap-2 text-white">
-                    <Upload className="w-5 h-5 text-indigo-400" /> Cargar Dataset
-                  </h3>
-                </div>
-                
-                <div className="relative group/upload">
-                  <input 
-                    type="file" 
-                    accept=".csv" 
-                    onChange={handleFileUpload} 
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
-                    disabled={isUploading}
-                  />
-                  <div className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
-                    isUploading 
-                      ? 'border-indigo-500 bg-indigo-500/10' 
-                      : 'border-slate-700 bg-slate-900/50 group-hover/upload:border-indigo-500 group-hover/upload:bg-slate-900'
-                  }`}>
-                    {isUploading ? (
-                      <RefreshCw className="w-10 h-10 text-indigo-400 mx-auto mb-3 animate-spin" />
-                    ) : (
-                      <FileJson className="w-10 h-10 text-slate-500 mx-auto mb-3 group-hover/upload:text-indigo-400 transition-colors group-hover/upload:scale-110 transition-transform" />
-                    )}
-                    <p className="text-sm font-bold text-slate-300">
-                      {isUploading ? 'Procesando...' : (fileName || "Seleccionar Archivo CSV")}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-2 uppercase font-bold tracking-wider">
-                      {isUploading ? 'Por favor espera' : 'Datos para Sección ' + selectedSection}
-                    </p>
-                  </div>
-                </div>
-
-                {/* ✅ Settings siempre visibles cuando hay datos */}
-                {data.length > 0 && (
-                  <div className="space-y-4 pt-4 border-t border-white/5">
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Título del Gráfico</label>
-                      <input
-                        type="text"
-                        value={config.chartTitle}
-                        onChange={(e) => setConfig({...config, chartTitle: e.target.value})}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                        placeholder="Título del gráfico"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                        <Database className="w-3 h-3" /> Eje X
-                      </label>
-                      {/* ✅ CORREGIDO: Opción vacía por defecto */}
-                      <select 
-                        value={config.xAxis} 
-                        onChange={(e) => setConfig({...config, xAxis: e.target.value, xAxisLabel: e.target.value})} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                      >
-                        <option value="">Seleccionar variable...</option>
-                        {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                      {/* ✅ Campo editable para título del Eje X */}
-                      {config.xAxis && (
-                        <input
-                          type="text"
-                          value={config.xAxisLabel || config.xAxis}
-                          onChange={(e) => setConfig({...config, xAxisLabel: e.target.value})}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
-                          placeholder="Título del eje X"
-                        />
-                      )}
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                        <TrendingUp className="w-3 h-3" /> Eje Y
-                      </label>
-                      {/* ✅ CORREGIDO: Opción vacía por defecto */}
-                      <select 
-                        value={config.yAxis} 
-                        onChange={(e) => setConfig({...config, yAxis: e.target.value, yAxisLabel: e.target.value})} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                      >
-                        <option value="">Seleccionar variable...</option>
-                        {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                      {/* ✅ Campo editable para título del Eje Y */}
-                      {config.yAxis && (
-                        <input
-                          type="text"
-                          value={config.yAxisLabel || config.yAxis}
-                          onChange={(e) => setConfig({...config, yAxisLabel: e.target.value})}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-medium text-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none mt-2"
-                          placeholder="Título del eje Y"
-                        />
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Tipo de Gráfico</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {(['bar', 'line', 'scatter']).map(t => (
-                          <button 
-                            key={t} 
-                            onClick={() => setConfig({...config, chartType: t})} 
-                            className={`py-3 rounded-xl text-[10px] font-black tracking-widest border transition-all ${
-                              config.chartType === t 
-                                ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg scale-105' 
-                                : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white'
-                            }`}
-                          >
-                            {t.toUpperCase()}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Paleta de Colores</label>
-                      <select 
-                        value={config.colorPalette} 
-                        onChange={(e) => setConfig({...config, colorPalette: e.target.value})} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                      >
-                        {Object.entries(PALETTES).map(([key, palette]) => (
-                          <option key={key} value={key}>{palette.name}</option>
-                        ))}
-                      </select>
-                      <div className="flex gap-1.5 mt-3 p-3 bg-slate-900/50 rounded-xl">
-                        {currentPalette.colors.map((color, i) => (
-                          <div 
-                            key={i} 
-                            className="h-8 flex-1 rounded-lg shadow-lg hover:scale-110 transition-transform" 
-                            style={{backgroundColor: color}}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider">Color de Fondo</label>
-                      <select 
-                        value={config.backgroundColor} 
-                        onChange={(e) => setConfig({...config, backgroundColor: e.target.value})} 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                      >
-                        {Object.entries(BACKGROUND_COLORS).map(([key, bg]) => (
-                          <option key={key} value={key}>{bg.name}</option>
-                        ))}
-                      </select>
-                      <div className="mt-3 p-4 rounded-xl shadow-lg border-2 border-white/10" style={{backgroundColor: BACKGROUND_COLORS[config.backgroundColor].color}}>
-                        <p className={`text-xs font-bold text-center ${['white', 'cream'].includes(config.backgroundColor) ? 'text-slate-800' : 'text-white'}`}>
-                          Vista previa del fondo
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {stats && (
-                <div className="glass rounded-3xl p-6 border border-purple-500/20 relative overflow-hidden">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-black flex items-center gap-2 text-white">
-                      <Calculator className="w-5 h-5 text-purple-400" /> Estadísticas
-                    </h3>
-                    <button 
-                      onClick={() => setShowStats(!showStats)}
-                      className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
-                    >
-                      {showStats ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  
-                  {showStats && (
-                    <div className="grid grid-cols-2 gap-4">
-                      {[
-                        { label: "Promedio", val: stats.mean, color: "from-blue-500 to-cyan-500", icon: "μ" },
-                        { label: "Mediana", val: stats.median, color: "from-purple-500 to-pink-500", icon: "M" },
-                        { label: "Desv. Est.", val: stats.stdDev, color: "from-pink-500 to-rose-500", icon: "σ" },
-                        { label: "Máximo", val: stats.max, color: "from-emerald-500 to-teal-500", icon: "↑" },
-                        { label: "Mínimo", val: stats.min, color: "from-orange-500 to-red-500", icon: "↓" },
-                        { label: "Muestras", val: stats.count, color: "from-indigo-500 to-purple-500", icon: "n" },
-                      ].map((s, i) => (
-                        <div key={i} className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-all">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] uppercase font-black text-slate-500">{s.label}</span>
-                            <span className={`text-xs font-black bg-gradient-to-r ${s.color} bg-clip-text text-transparent`}>{s.icon}</span>
-                          </div>
-                          <span className={`text-2xl font-black bg-gradient-to-r ${s.color} bg-clip-text text-transparent block`}>
-                            {s.val}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="lg:col-span-8 space-y-6">
-              <div className="glass rounded-[2.5rem] p-10 min-h-[600px] border border-white/10 relative overflow-hidden" style={{backgroundColor: currentBgColor.color}}>
-                <div className="absolute top-6 right-6 z-10 flex items-center gap-3">
-                  {data.length > 0 && hasSelectedVariables && (
-                    <>
-                      <button
-                        onClick={downloadChart}
-                        className="p-3 bg-slate-950/80 backdrop-blur-md border border-white/10 rounded-xl hover:bg-white/10 transition-all shadow-lg"
-                        title="Descargar gráfico"
-                      >
-                        <Download className="w-5 h-5 text-indigo-400" />
-                      </button>
-                      <div className="bg-slate-950/80 backdrop-blur-md px-4 py-2 rounded-xl border border-white/5 flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-indigo-400" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">En Vivo</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* ✅ CORREGIDO: Solo mostrar gráfico si hay datos Y variables seleccionadas */}
-                {data.length > 0 && hasSelectedVariables ? (
-                  <div className="w-full h-[550px] pt-12">
-                    <h4 className={`text-2xl font-black mb-6 text-center ${isLightBg ? 'text-slate-900' : 'text-white'}`}>
-                      {config.chartTitle}
-                    </h4>
-                    <div style={{ width: '100%', height: '480px' }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        {config.chartType === 'bar' ? (
-                          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                            {config.showGrid && <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
-                            <XAxis 
-                              dataKey={config.xAxis}
-                              label={{ value: config.xAxisLabel || config.xAxis, position: 'insideBottom', offset: -10, style: { fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
-                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontSize: 11, fontWeight: 700}} 
-                              axisLine={false} 
-                              tickLine={false}
-                              angle={-30}
-                              textAnchor="end"
-                              height={70}
-                            />
-                            <YAxis 
-                              label={{ value: config.yAxisLabel || config.yAxis, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
-                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontSize: 11, fontWeight: 700}} 
-                              axisLine={false} 
-                              tickLine={false}
-                            />
-                            <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(99, 102, 241, 0.1)'}} />
-                            <Bar 
-                              dataKey={config.yAxis}
-                              radius={[12, 12, 0, 0]} 
-                              barSize={50}
-                              animationDuration={config.animationDuration}
-                            >
-                              {chartData.map((_, i) => (
-                                <Cell key={i} fill={currentPalette.colors[i % currentPalette.colors.length]} />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        ) : config.chartType === 'line' ? (
-                          <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                            {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
-                            <XAxis 
-                              dataKey={config.xAxis}
-                              label={{ value: config.xAxisLabel || config.xAxis, position: 'insideBottom', offset: -10, style: { fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
-                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
-                              axisLine={false}
-                              angle={-30}
-                              textAnchor="end"
-                              height={70}
-                            />
-                            <YAxis 
-                              label={{ value: config.yAxisLabel || config.yAxis, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
-                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
-                              axisLine={false}
-                            />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Line 
-                              type="monotone" 
-                              dataKey={config.yAxis} 
-                              stroke={currentPalette.colors[0]} 
-                              strokeWidth={4} 
-                              dot={{r: 6, fill: currentPalette.colors[0], strokeWidth: 3, stroke: '#fff'}}
-                              activeDot={{r: 8, strokeWidth: 3}}
-                              animationDuration={config.animationDuration}
-                            />
-                          </LineChart>
-                        ) : (
-                          <ScatterChart margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                            {config.showGrid && <CartesianGrid strokeDasharray="3 3" stroke={isLightBg ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.05)'} />}
-                            <XAxis 
-                              dataKey={config.xAxis} 
-                              name={config.xAxisLabel || config.xAxis}
-                              label={{ value: config.xAxisLabel || config.xAxis, position: 'insideBottom', offset: -10, style: { fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
-                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
-                              axisLine={false}
-                            />
-                            <YAxis 
-                              dataKey={config.yAxis} 
-                              name={config.yAxisLabel || config.yAxis}
-                              label={{ value: config.yAxisLabel || config.yAxis, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: isLightBg ? '#1e293b' : '#94a3b8', fontWeight: 700, fontSize: 12 } }}
-                              tick={{fill: isLightBg ? '#475569' : '#64748b', fontWeight: 700}} 
-                              axisLine={false}
-                            />
-                            <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-                            <Scatter 
-                              name="Muestras" 
-                              data={chartData} 
-                              fill={currentPalette.colors[2]} 
-                              shape="circle"
-                            />
-                          </ScatterChart>
-                        )}
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-6 animate-pulse">
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-2xl"></div>
-                      <div className="relative w-32 h-32 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
-                        <BarChart3 className="w-16 h-16 text-slate-700" />
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <p className="font-black text-2xl text-slate-300 mb-2">
-                        {data.length > 0 ? 'Selecciona las Variables' : 'Esperando Datos'}
-                      </p>
-                      <p className="text-sm font-medium text-slate-500">
-                        {data.length > 0 ? 'Elige las variables para los ejes X e Y' : 'Sube un archivo CSV para comenzar el análisis'}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {data.length > 0 && (
-                <div className="glass rounded-3xl overflow-hidden border border-white/10">
-                  <div className="px-8 py-5 border-b border-white/5 bg-slate-900/30 flex items-center justify-between">
-                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-indigo-400 flex items-center gap-2">
-                      <Database className="w-4 h-4" />
-                      Vista de Datos
-                    </h4>
-                    <span className="text-xs font-bold text-slate-500">
-                      Mostrando {Math.min(data.length, 10)} de {data.length} registros
-                    </span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="bg-slate-950">
-                          <th className="px-8 py-5 font-black text-slate-500 uppercase tracking-wider border-b border-white/5">#</th>
-                          {columns.map(c => (
-                            <th key={c} className="px-8 py-5 font-black text-slate-300 uppercase tracking-wider border-b border-white/5">
-                              {c}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.slice(0, 10).map((row, i) => (
-                          <tr key={i} className="border-b border-white/5 hover:bg-indigo-500/5 transition-colors">
-                            <td className="px-8 py-5 text-slate-500 font-bold">{i + 1}</td>
-                            {columns.map(c => (
-                              <td key={c} className="px-8 py-5 text-slate-400 font-medium">
-                                {String(row[c])}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-  
-  // ========================================
-  // FIN: LABORATORIO SECCIÓN 0.2
-  // ========================================
- // HOME VIEW
-return (
-  <div className="min-h-screen bg-slate-950">
-    <div className="fixed inset-0 overflow-hidden pointer-events-none">
-      <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px] animate-pulse"></div>
-      <div className="absolute bottom-0 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '2s'}}></div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '4s'}}></div>
-    </div>
-
-    <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
-      <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="relative group">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full blur-xl opacity-75 group-hover:opacity-100 transition-opacity"></div>
-            <div className="relative w-14 h-14 rounded-full bg-gradient-to-br from-indigo-600 to-purple-700 p-0.5 shadow-2xl">
-              <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center overflow-hidden">
-                <img
-                  src={statlabLogo}
-                  alt="StatLab logo"
-                  className="w-full h-full object-cover scale-150 translate-y-0.5"
-                />
-              </div>
-            </div>
-          </div>
-          <div>
-            <h1 className="text-xl font-black text-white leading-none tracking-tight">StatLab</h1>
-            <p className="text-[10px] text-indigo-400 font-black uppercase tracking-[0.2em]">Research & Analytics</p>
+            <button
+              onClick={() => setView('developers')}
+              className="hover:text-white transition-colors"
+            >
+              Desarrolladores
+            </button>
+            <a
+              href="https://www.udemy.com/course/fundamentos-de-estadistica/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:shadow-2xl hover:shadow-indigo-500/30 transition-all"
+            >
+              Curso Udemy
+            </a>
           </div>
         </div>
-
-        <div className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-400">
-          <button 
-            onClick={() => {
-              const el = document.getElementById('chapters');
-              el?.scrollIntoView({ behavior: 'smooth' });
-            }}
-            className="hover:text-white transition-colors"
-          >
-            Laboratorios
-          </button>
-          <button 
-            onClick={() => setView('developers')}
-            className="hover:text-white transition-colors"
-          >
-            Desarrolladores
-          </button>
-          <a 
-            href="https://www.udemy.com/course/fundamentos-de-estadistica/" 
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest hover:shadow-2xl hover:shadow-indigo-500/30 transition-all"
-          >
-            Curso Udemy
-          </a>
-        </div>
-      </div>
-    </header>
+      </header>
 
       <section className="relative pt-32 pb-40 overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 relative z-10 text-center">
           <div className="inline-flex items-center gap-2 bg-indigo-500/10 border border-indigo-500/20 px-5 py-2.5 rounded-full text-[10px] font-black text-indigo-400 mb-12 hover:scale-105 transition-transform">
-            <BookOpen className="w-4 h-4" /> 
+            <BookOpen className="w-4 h-4" />
             LABORATORIOS INTERACTIVOS DEL CURSO DE UDEMY
             <Sparkles className="w-4 h-4 animate-pulse" />
           </div>
-          
+
           <h2 className="text-6xl md:text-8xl font-black mb-8 leading-[0.9] tracking-tighter text-white">
             Fundamentos de<br />
             <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent italic">
               Estadística
             </span>
           </h2>
-          
+
           <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-14 leading-relaxed font-medium">
-            Herramienta especializada en análisis estadístico descriptivo e inferencial. 
+            Herramienta especializada en análisis estadístico descriptivo e inferencial.
             Combina precisión técnica con una interfaz intuitiva para la exploración y visualización profesional de datos.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
-            <button 
+            <button
               onClick={() => {
                 const el = document.getElementById('chapters');
                 el?.scrollIntoView({ behavior: 'smooth' });
               }}
               className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-12 py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] hover:shadow-2xl hover:shadow-indigo-500/50 transition-all hover:scale-105 flex items-center justify-center gap-3 group"
             >
-              <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" /> 
+              <Play className="w-5 h-5 fill-current group-hover:scale-110 transition-transform" />
               Ver Capítulos
             </button>
-            <a 
+            <a
               href="mailto:statlabresearch2025@gmail.com"
               className="w-full sm:w-auto glass-hover border border-white/10 px-12 py-5 rounded-2xl font-black text-sm uppercase tracking-[0.2em] transition-all hover:scale-105 flex items-center justify-center gap-3 group text-white hover:bg-white/5"
             >
@@ -1299,10 +778,10 @@ return (
 
         <div className="space-y-6">
           {BOOK_STRUCTURE.map((chapter, idx) => (
-            <div 
+            <div
               key={chapter.chapter}
               className="glass rounded-3xl overflow-hidden border border-white/10 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500"
-              style={{animationDelay: `${idx * 50}ms`}}
+              style={{ animationDelay: `${idx * 50}ms` }}
             >
               <button
                 onClick={() => setExpandedChapter(expandedChapter === chapter.chapter ? null : chapter.chapter)}
@@ -1379,126 +858,126 @@ return (
         </div>
       </section>
 
-<section className="max-w-7xl mx-auto px-6 mb-40">
-  <div className="relative group">
-    <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/20 to-purple-600/20 rounded-[3rem] blur-2xl group-hover:opacity-100 opacity-50 transition-all duration-1000"></div>
+      <section className="max-w-7xl mx-auto px-6 mb-40">
+        <div className="relative group">
+          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/20 to-purple-600/20 rounded-[3rem] blur-2xl group-hover:opacity-100 opacity-50 transition-all duration-1000"></div>
 
-    <div className="relative glass rounded-[3.5rem] p-10 md:p-16 border border-white/10 overflow-hidden bg-slate-900/40">
-      <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
-        <Quote className="w-48 h-48 text-white rotate-12" />
-      </div>
+          <div className="relative glass rounded-[3.5rem] p-10 md:p-16 border border-white/10 overflow-hidden bg-slate-900/40">
+            <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
+              <Quote className="w-48 h-48 text-white rotate-12" />
+            </div>
 
-      <div className="flex flex-col items-center">
-        <div className="flex flex-col items-center mb-10">
-          <div className="relative mb-6">
-            <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full opacity-20 blur-xl"></div>
+            <div className="flex flex-col items-center">
+              <div className="flex flex-col items-center mb-10">
+                <div className="relative mb-6">
+                  <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full opacity-20 blur-xl"></div>
 
-            <div className="w-28 h-28 rounded-full border-4 border-white/20 p-1 bg-slate-950 relative z-10">
-              <div className="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center">
-                <img
-                  src={statlabLogo}
-                  alt="StatLab logo"
-                  className="w-full h-full object-cover scale-150 translate-y-1"
-                  draggable={false}
-                />
+                  <div className="w-28 h-28 rounded-full border-4 border-white/20 p-1 bg-slate-950 relative z-10">
+                    <div className="w-full h-full rounded-full overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center">
+                      <img
+                        src={statlabLogo}
+                        alt="StatLab logo"
+                        className="w-full h-full object-cover scale-150 translate-y-1"
+                        draggable={false}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <h4 className="text-3xl md:text-4xl font-black text-white tracking-tighter mb-2">
+                  StatLab Research & Analytics
+                </h4>
+                <div className="px-6 py-2 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-full">
+                  <span className="text-indigo-400 font-black text-[10px] uppercase tracking-[0.3em]">
+                    Equipo de Desarrollo
+                  </span>
+                </div>
+              </div>
+
+              <div className="max-w-4xl w-full text-center relative px-10 mb-12">
+                <Quote className="w-6 h-6 text-indigo-500/40 absolute -top-4 left-0 rotate-180" />
+                <p className="text-xl md:text-2xl font-medium text-slate-300 italic leading-relaxed">
+                  "Transformamos datos complejos en conocimiento estadístico mediante herramientas que combinan rigor académico con diseño intuitivo."
+                </p>
+                <Quote className="w-6 h-6 text-purple-500/40 absolute -bottom-4 right-0" />
+              </div>
+
+              <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-between pt-10 border-t border-white/5 gap-8">
+                <div className="flex gap-16">
+                  <div className="space-y-1">
+                    <p className="text-4xl font-black text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text">
+                      13+
+                    </p>
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                      Capítulos
+                    </p>
+                  </div>
+                  <div className="space-y-1 relative pl-8 border-l border-white/5">
+                    <p className="text-4xl font-black text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text">
+                      50+
+                    </p>
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                      Laboratorios
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <a
+                    href="mailto:statlabresearch2025@gmail.com"
+                    className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:scale-105 transition-all"
+                  >
+                    <Mail className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs font-black uppercase text-slate-300">
+                      Soporte
+                    </span>
+                  </a>
+                  <button
+                    onClick={() => setView('developers')}
+                    className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 hover:scale-105 transition-all"
+                  >
+                    <Users className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs font-black uppercase text-indigo-400">
+                      Equipo
+                    </span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-
-          <h4 className="text-3xl md:text-4xl font-black text-white tracking-tighter mb-2">
-            StatLab Research & Analytics
-          </h4>
-          <div className="px-6 py-2 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-full">
-            <span className="text-indigo-400 font-black text-[10px] uppercase tracking-[0.3em]">
-              Equipo de Desarrollo
-            </span>
-          </div>
         </div>
+      </section>
 
-        <div className="max-w-4xl w-full text-center relative px-10 mb-12">
-          <Quote className="w-6 h-6 text-indigo-500/40 absolute -top-4 left-0 rotate-180" />
-          <p className="text-xl md:text-2xl font-medium text-slate-300 italic leading-relaxed">
-            "Transformamos datos complejos en conocimiento estadístico mediante herramientas que combinan rigor académico con diseño intuitivo."
-          </p>
-          <Quote className="w-6 h-6 text-purple-500/40 absolute -bottom-4 right-0" />
-        </div>
+      <footer className="bg-slate-950 border-t border-white/5 py-12">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-10">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 p-0.5 shadow-xl">
+                  <div className="w-full h-full rounded-xl bg-slate-950 flex items-center justify-center overflow-hidden">
+                    <img
+                      src={statlabLogo}
+                      alt="StatLab logo"
+                      className="w-full h-full object-cover scale-150 translate-y-0.5"
+                      draggable={false}
+                    />
+                  </div>
+                </div>
 
-        <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-between pt-10 border-t border-white/5 gap-8">
-          <div className="flex gap-16">
-            <div className="space-y-1">
-              <p className="text-4xl font-black text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text">
-                13+
-              </p>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                Capítulos
-              </p>
-            </div>
-            <div className="space-y-1 relative pl-8 border-l border-white/5">
-              <p className="text-4xl font-black text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text">
-                50+
-              </p>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                Laboratorios
+                <div>
+                  <span className="font-black text-lg text-white tracking-tight block">
+                    StatLab
+                  </span>
+                  <span className="text-[9px] text-indigo-400 font-black uppercase tracking-widest">
+                    Research & Analytics
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Herramienta especializada en análisis estadístico para educación y desarrollo profesional.
               </p>
             </div>
-          </div>
-
-          <div className="flex gap-4">
-            <a
-              href="mailto:statlabresearch2025@gmail.com"
-              className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:scale-105 transition-all"
-            >
-              <Mail className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs font-black uppercase text-slate-300">
-                Soporte
-              </span>
-            </a>
-            <button
-              onClick={() => setView('developers')}
-              className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 hover:scale-105 transition-all"
-            >
-              <Users className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs font-black uppercase text-indigo-400">
-                Equipo
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<footer className="bg-slate-950 border-t border-white/5 py-12">
-  <div className="max-w-7xl mx-auto px-6">
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-10">
-      <div>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-700 p-0.5 shadow-xl">
-            <div className="w-full h-full rounded-xl bg-slate-950 flex items-center justify-center overflow-hidden">
-              <img
-                src={statlabLogo}
-                alt="StatLab logo"
-                className="w-full h-full object-cover scale-150 translate-y-0.5"
-                draggable={false}
-              />
-            </div>
-          </div>
-
-          <div>
-            <span className="font-black text-lg text-white tracking-tight block">
-              StatLab
-            </span>
-            <span className="text-[9px] text-indigo-400 font-black uppercase tracking-widest">
-              Research & Analytics
-            </span>
-          </div>
-        </div>
-
-        <p className="text-slate-500 text-sm leading-relaxed">
-          Herramienta especializada en análisis estadístico para educación y desarrollo profesional.
-        </p>
-      </div>
 
             <div>
               <h3 className="text-white font-black text-sm uppercase tracking-wider mb-4">Contacto</h3>
@@ -1534,12 +1013,12 @@ return (
                   <span>Server Online</span>
                 </div>
               </div>
-              
+
               <p className="text-slate-600 text-xs font-bold uppercase tracking-wider text-center">
                 © 2026 StatLab Research & Analytics • Todos los derechos reservados
               </p>
-              
-              <button 
+
+              <button
                 onClick={() => setView('developers')}
                 className="text-xs text-slate-500 hover:text-indigo-400 transition-colors font-bold"
               >
