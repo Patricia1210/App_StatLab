@@ -474,7 +474,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                   >
                     <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
                     Volver al Índice
-                    </button>
+            </button>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-xl relative overflow-hidden">
                 <div className="absolute inset-0 bg-white/10"></div>

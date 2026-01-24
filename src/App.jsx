@@ -8,7 +8,13 @@ import {
 
 import statlabLogo from './assets/logo-statlab.png';
 import LabRenderer from "./labs/LabRenderer";
-import Lab0_2 from "./labs/chapter0/Lab0_2";
+
+
+
+
+
+// ajusta la ruta real donde guardaste el .jsx
+
 
 // ============================================================
 // ESTRUCTURA DEL CURSO
@@ -522,145 +528,215 @@ const App = () => {
     );
   }
 
-  // ============================================================
-  // LABS ROUTER (ÚNICO)  ✅ (con navegación consistente + props a labs)
-  // ============================================================
+// ============================================================
+// LABS ROUTER (ÚNICO) ✅ (con navegación consistente + props a labs)
+// ============================================================
 
-  const goHome = (e) => {
-    // ✅ por si el botón vive dentro de <form> o <a>
-    if (e?.preventDefault) e.preventDefault();
-    if (e?.stopPropagation) e.stopPropagation();
+// Normaliza selectedSection para evitar guiones raros
+const normalizedSection = String(selectedSection ?? "")
+  .replace(/[–—]/g, "-")
+  .trim();
 
-    setView("home");
-    setSelectedSection(null);
+const goHome = (e) => {
+  if (e?.preventDefault) e.preventDefault();
+  if (e?.stopPropagation) e.stopPropagation();
 
-    // ✅ limpiar querystring
-    window.history.pushState({}, "", window.location.pathname);
+  setView("home");
+  setSelectedSection(null);
+  window.history.pushState({}, "", window.location.pathname);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
 
-    // ✅ reset scroll
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+const goToSection = (sectionId, e) => {
+  if (e?.preventDefault) e.preventDefault();
+  if (e?.stopPropagation) e.stopPropagation();
 
-  const goToSection = (sectionId, e) => {
-    if (e?.preventDefault) e.preventDefault();
-    if (e?.stopPropagation) e.stopPropagation();
+  const cleanId = String(sectionId ?? "").replace(/[–—]/g, "-").trim();
+  setSelectedSection(cleanId);
+  setView("lab");
+  window.history.pushState({}, "", `?section=${encodeURIComponent(cleanId)}`);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
 
-    setSelectedSection(sectionId);
-    setView("lab");
-
-    window.history.pushState({}, "", `?section=${sectionId}`);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  if (view === "lab") {
-    // 0.1 Bienvenida (LabRenderer)
-    if (selectedSection === "0.1") {
-  return (
-    <LabRenderer
-      labKey="chapter0/Lab0_1"
-      fallback={
-        <div className="min-h-screen bg-slate-950 text-slate-200 p-10">
-          <h2 className="text-2xl font-black text-white">Cargando…</h2>
-        </div>
-      }
-      // ✅ CORRECTO: props directas (sin objeto "props")
-      goHome={goHome}
-      goToSection={goToSection}
-      setView={setView}
-      setSelectedSection={setSelectedSection}
-      selectedSection={selectedSection}
-      activeSectionData={activeSectionData}
-    />
-  );
-}
-
-    // 0.2 Presentación (Lab0_2 directo)
-    if (selectedSection === "0.2" && activeSectionData) {
-      return (
-        <Lab0_2
-          // ✅ agrega goHome / goToSection para que los botones funcionen igual
-          goHome={goHome}
-          goToSection={goToSection}
-          setView={setView}
-          setSelectedSection={setSelectedSection}
-          selectedSection={selectedSection}
-          activeSectionData={activeSectionData}
-          data={data}
-          columns={columns}
-          fileName={fileName}
-          isUploading={isUploading}
-          handleFileUpload={handleFileUpload}
-          config={config}
-          setConfig={setConfig}
-          chartData={chartData}
-          stats={stats}
-          showStats={showStats}
-          setShowStats={setShowStats}
-          PALETTES={PALETTES}
-          BACKGROUND_COLORS={BACKGROUND_COLORS}
-          downloadChart={downloadChart}
-          CustomTooltip={CustomTooltip}
-        />
-      );
-    }
-    
-        // 1.1 Definición de estadística (LabRenderer)
-    if (selectedSection === "1.1") {
-      return (
-        <LabRenderer
-        labKey="chapter1/Lab1_1"
-        fallback={
-        <div className="min-h-screen bg-slate-950 text-slate-200 p-10">
-           <h2 className="text-2xl font-black text-white">Cargando…</h2>
-        </div>
-      }
-      goHome={goHome}
-      goToSection={goToSection}
-      setView={setView}
-      setSelectedSection={setSelectedSection}
-      selectedSection={selectedSection}
-      activeSectionData={activeSectionData}
-    />
-  );
-  }
-    
-    // 1.2 Población y muestra (LabRenderer)
-if (selectedSection === "1.2") {
-  return (
-    <LabRenderer
-      labKey="chapter1/Lab1_2"
-      fallback={
-      <div className="min-h-screen bg-slate-950 text-slate-200 p-10">
-         <h2 className="text-2xl font-black text-white">Cargando…</h2>
-      </div>
-    }
-    goHome={goHome}
-    goToSection={goToSection}
-    setView={setView}
- />
-);
-}
-
-    // Cualquier otra sección aún no conectada
+if (view === "lab") {
+   // ==================== CAPÍTULO 0 ====================
+  
+  if (normalizedSection === "0.1") {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-6">
-        <div className="glass rounded-3xl p-8 border border-white/10 max-w-xl w-full text-center">
-          <p className="text-white font-black text-xl mb-2">Laboratorio en construcción</p>
-          <p className="text-slate-400 font-medium">
-            La sección <span className="text-indigo-400 font-black">{selectedSection}</span> aún no está conectada.
-          </p>
-
-          <button
-            type="button"                 // ✅ evita submit accidental si hay <form>
-            onClick={goHome}              // ✅ usa el handler único
-            className="mt-6 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 font-bold text-sm"
-          >
-            Volver al índice
-          </button>
-        </div>
-      </div>
+      <LabRenderer
+        labKey="chapter0/Lab0_1"
+        fallback={
+          <div className="min-h-screen bg-slate-950 text-slate-200 p-10">
+            <h2 className="text-2xl font-black text-white">Cargando…</h2>
+          </div>
+        }
+        goHome={goHome}
+        goToSection={goToSection}
+        setView={setView}
+        setSelectedSection={setSelectedSection}
+        selectedSection={normalizedSection}
+        activeSectionData={activeSectionData}
+      />
     );
   }
+
+  // 0.2 Presentación (Lab0_2 directo)
+  if (normalizedSection === "0.2" && activeSectionData) {
+    return (
+      <Lab0_2
+        goHome={goHome}
+        goToSection={goToSection}
+        setView={setView}
+        setSelectedSection={setSelectedSection}
+        selectedSection={normalizedSection}
+        activeSectionData={activeSectionData}
+        data={data}
+        columns={columns}
+        fileName={fileName}
+        isUploading={isUploading}
+        handleFileUpload={handleFileUpload}
+        config={config}
+        setConfig={setConfig}
+        chartData={chartData}
+        stats={stats}
+        showStats={showStats}
+        setShowStats={setShowStats}
+        PALETTES={PALETTES}
+        BACKGROUND_COLORS={BACKGROUND_COLORS}
+        downloadChart={downloadChart}
+        CustomTooltip={CustomTooltip}
+      />
+    );
+  }
+
+  // 1.1 Definición de estadística (LabRenderer)
+  if (normalizedSection === "1.1") {
+    return (
+      <LabRenderer
+        labKey="chapter1/Lab1_1"
+        fallback={
+          <div className="min-h-screen bg-slate-950 text-slate-200 p-10">
+            <h2 className="text-2xl font-black text-white">Cargando…</h2>
+          </div>
+        }
+        goHome={goHome}
+        goToSection={goToSection}
+        setView={setView}
+        setSelectedSection={setSelectedSection}
+        selectedSection={normalizedSection}
+        activeSectionData={activeSectionData}
+      />
+    );
+  }
+
+  // 1.2 Población y muestra (LabRenderer)
+  if (normalizedSection === "1.2") {
+    return (
+      <LabRenderer
+        labKey="chapter1/Lab1_2"
+        fallback={
+          <div className="min-h-screen bg-slate-950 text-slate-200 p-10">
+            <h2 className="text-2xl font-black text-white">Cargando…</h2>
+          </div>
+        }
+        goHome={goHome}
+        goToSection={goToSection}
+        setView={setView}
+        setSelectedSection={setSelectedSection}
+        selectedSection={normalizedSection}
+        activeSectionData={activeSectionData}
+      />
+    );
+  }
+
+  // ==================== CAPÍTULO 2 ====================
+  
+  // ✅ CORRECTO para 2.1
+if (normalizedSection === "2.1" || normalizedSection === "lab-2-1" || normalizedSection === "2-1") {
+  return (
+    <LabRenderer
+      labKey="chapter2/Lab2_1"  // ✅ Usa labKey
+      goHome={goHome}
+      goToSection={goToSection}
+      setView={setView}
+      setSelectedSection={setSelectedSection}
+      selectedSection={normalizedSection}
+      activeSectionData={activeSectionData}
+    />
+  );
+}
+
+// ✅ CORRECTO para 2.2
+if (normalizedSection === "2.2" || normalizedSection === "lab-2-2") {
+  return (
+    <LabRenderer
+      labKey="chapter2/Lab2_2"  // ✅ Usa labKey
+      goHome={goHome}
+      goToSection={goToSection}
+      setView={setView}
+      setSelectedSection={setSelectedSection}
+      selectedSection={normalizedSection}
+      activeSectionData={activeSectionData}
+    />
+  );
+}
+
+// ✅ CORRECTO para 2.3
+if (normalizedSection === "2.3" || normalizedSection === "lab-2-3") {
+  return (
+    <LabRenderer
+      labKey="chapter2/Lab2_3"  // ✅ Usa labKey
+      goHome={goHome}
+      goToSection={goToSection}
+      setView={setView}
+      setSelectedSection={setSelectedSection}
+      selectedSection={normalizedSection}
+      activeSectionData={activeSectionData}
+    />
+  );
+}
+
+// ✅ CORRECTO para 2.4
+if (normalizedSection === "2.4" || normalizedSection === "lab-2-4") {
+  return (
+    <LabRenderer
+      labKey="chapter2/Lab2_4"  // ✅ Usa labKey
+      goHome={goHome}
+      goToSection={goToSection}
+      setView={setView}
+      setSelectedSection={setSelectedSection}
+      selectedSection={normalizedSection}
+      activeSectionData={activeSectionData}
+    />
+  );
+}
+
+  // ==================== FALLBACK ====================
+  // Cualquier otra sección no conectada
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-6">
+      <div className="glass rounded-3xl p-8 border border-white/10 max-w-xl w-full text-center">
+        <div className="text-6xl mb-4">🚧</div>
+        <p className="text-white font-black text-xl mb-2">
+          Laboratorio en construcción
+        </p>
+        <p className="text-slate-400 font-medium mb-6">
+          La sección{" "}
+          <span className="text-indigo-400 font-black">{normalizedSection}</span>{" "}
+          aún no está conectada.
+        </p>
+
+        <button
+          type="button"
+          onClick={goHome}
+          className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 font-bold text-sm transition-all"
+        >
+          ← Volver al Índice
+        </button>
+      </div>
+    </div>
+  );
+}
 
   // ============================================================
   // HOME VIEW
