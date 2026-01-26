@@ -834,7 +834,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                   </div>
                   
                   <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={histogramData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                    <BarChart data={histogramData} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
                       <XAxis 
                         dataKey="rango" 
@@ -845,7 +845,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                         label={{
                           value: 'Rango de Valores',
                           position: 'insideBottom',
-                          offset: -10,
+                          offset: -50,
                           style: { fill: '#94a3b8', fontWeight: 700, fontSize: 12 }
                         }}
                       />
@@ -873,6 +873,8 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                       <Legend 
                         wrapperStyle={{ fontWeight: 700 }}
                         iconType="circle"
+                        verticalAlign="bottom"
+                        align="center"
                       />
                       <Bar dataKey="Población" fill="#6366f1" radius={[8, 8, 0, 0]} />
                       <Bar dataKey="Muestra" fill="#ec4899" radius={[8, 8, 0, 0]} />
