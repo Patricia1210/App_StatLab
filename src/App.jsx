@@ -8,6 +8,7 @@ import {
 
 import statlabLogo from './assets/logo-statlab.png';
 import LabRenderer from "./labs/LabRenderer";
+import Lab0_2 from "./labs/chapter0/Lab0_2";
 
 
 
@@ -583,7 +584,8 @@ if (view === "lab") {
   // 0.2 Presentación (Lab0_2 directo)
   if (normalizedSection === "0.2" && activeSectionData) {
     return (
-      <Lab0_2
+      <LabRenderer
+        labKey="chapter0/Lab0_2"
         goHome={goHome}
         goToSection={goToSection}
         setView={setView}

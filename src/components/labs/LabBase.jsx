@@ -144,7 +144,18 @@ export default function LabBase({
                 <input
                   type="file"
                   accept=".csv"
-                  onChange={handleFileUpload}
+                  onChange={(e) => {
+                    // ✅ Debug clave: si esto sale, el problema es que NO estás pasando el handler
+                     if (typeof handleFileUpload !== "function") {
+                      console.error("[LabBase] handleFileUpload NO es función:", handleFileUpload);
+                      return;
+                    }
+
+                    handleFileUpload(e);
+                    // ✅ Importante en Safari: permite volver a seleccionar el mismo archivo
+
+                     e.target.value = "";
+                    }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                   disabled={isUploading}
                 />

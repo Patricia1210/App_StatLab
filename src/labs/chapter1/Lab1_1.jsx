@@ -9,6 +9,42 @@ const Lab1_1 = ({ goHome }) => {
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [lastAnswer, setLastAnswer] = useState(null);
+  const [activeStep, setActiveStep] = useState(null);
+
+  const processSteps = [
+    { 
+      emoji: '📥', 
+      label: 'RECOLECTAR', 
+      color: 'cyan',
+      title: 'Recolección de Datos',
+      description: 'Obtener información relevante mediante encuestas, experimentos, observación o bases de datos existentes.',
+      examples: ['Encuestas a clientes', 'Mediciones en laboratorio', 'Registros de ventas']
+    },
+    { 
+      emoji: '📋', 
+      label: 'ORGANIZAR', 
+      color: 'blue',
+      title: 'Organización de Datos',
+      description: 'Estructurar la información en tablas, categorías o formatos que faciliten su análisis.',
+      examples: ['Tablas de frecuencia', 'Bases de datos', 'Hojas de cálculo']
+    },
+    { 
+      emoji: '🔍', 
+      label: 'ANALIZAR', 
+      color: 'indigo',
+      title: 'Análisis de Datos',
+      description: 'Aplicar métodos estadísticos para encontrar patrones, tendencias y relaciones en los datos.',
+      examples: ['Cálculo de promedios', 'Gráficos estadísticos', 'Pruebas de hipótesis']
+    },
+    { 
+      emoji: '💡', 
+      label: 'INTERPRETAR', 
+      color: 'purple',
+      title: 'Interpretación de Resultados',
+      description: 'Traducir los hallazgos estadísticos en conclusiones significativas para la toma de decisiones.',
+      examples: ['Reportes ejecutivos', 'Recomendaciones', 'Predicciones']
+    }
+  ];
 
   const quizzes = {
     tipos: {
@@ -260,19 +296,60 @@ const Lab1_1 = ({ goHome }) => {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { emoji: '📥', label: 'RECOLECTAR', color: 'cyan' },
-                { emoji: '📋', label: 'ORGANIZAR', color: 'blue' },
-                { emoji: '🔍', label: 'ANALIZAR', color: 'indigo' },
-                { emoji: '💡', label: 'INTERPRETAR', color: 'purple' }
-              ].map((item, i) => (
-                <div key={i} className="bg-slate-950/50 p-6 rounded-2xl border border-white/20 text-center hover:scale-105 transition-transform">
+            <div className="mb-4">
+              <p className="text-sm text-cyan-400 font-bold text-center mb-4">
+                ✨ Haz clic en cada paso para conocer más detalles
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {processSteps.map((item, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveStep(activeStep === i ? null : i)}
+                  className={`bg-slate-950/50 p-6 rounded-2xl border text-center hover:scale-105 transition-all cursor-pointer ${
+                    activeStep === i 
+                      ? 'border-cyan-500 shadow-lg shadow-cyan-500/30 scale-105' 
+                      : 'border-white/20 hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/20'
+                  }`}
+                >
                   <div className="text-3xl mb-3">{item.emoji}</div>
                   <div className="font-black text-sm text-white">{item.label}</div>
-                </div>
+                </button>
               ))}
             </div>
+
+            {activeStep !== null && (
+              <div className="bg-slate-900 border-2 border-cyan-500/50 rounded-2xl p-6 animate-slideDown">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="text-5xl">{processSteps[activeStep].emoji}</div>
+                  <div className="flex-1">
+                    <h4 className="font-black text-2xl text-white mb-2">{processSteps[activeStep].title}</h4>
+                    <p className="text-slate-300 leading-relaxed">
+                      {processSteps[activeStep].description}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setActiveStep(null)}
+                    className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-bold transition-all shrink-0"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <div className="bg-slate-950/50 p-5 rounded-xl border border-cyan-500/20">
+                  <p className="text-sm font-bold text-cyan-400 mb-3">💡 Ejemplos prácticos:</p>
+                  <ul className="space-y-2">
+                    {processSteps[activeStep].examples.map((example, idx) => (
+                      <li key={idx} className="text-sm text-slate-300 flex items-start gap-3">
+                        <span className="text-cyan-400 font-bold">•</span>
+                        <span>{example}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -554,6 +631,22 @@ const Lab1_1 = ({ goHome }) => {
         </div>
 
       </main>
+
+      <style jsx>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-slideDown {
+          animation: slideDown 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 };
