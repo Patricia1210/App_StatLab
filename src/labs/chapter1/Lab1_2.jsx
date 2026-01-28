@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Users, Shuffle, RefreshCw, TrendingUp, BarChart3, ArrowLeft, Upload, FileSpreadsheet, X, Download, Info, AlertCircle, BookOpen, ChevronDown, ChevronUp, Target } from 'lucide-react';
+import { Users, Shuffle, RefreshCw, TrendingUp, BarChart3, ArrowLeft, Upload, FileSpreadsheet, X, Download, Info, AlertCircle, ChevronDown, ChevronUp, Target, Table as TableIcon, Layers } from 'lucide-react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -19,28 +19,36 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [categoricalColumns, setCategoricalColumns] = useState([]);
   const [selectedStratColumn, setSelectedStratColumn] = useState('');
-  const [availableMethods, setAvailableMethods] = useState(['random', 'systematic']);
+  const [availableMethods, setAvailableMethods] = useState(['random', 'cluster']);
   const [showGuide, setShowGuide] = useState(true);
+  const [showStats, setShowStats] = useState(false);
+  const [numClusters, setNumClusters] = useState(20);
+  const [clusterSize, setClusterSize] = useState(50);
   
   useEffect(() => {
     if (dataSource === 'generated') {
       generatePopulation();
-      setAvailableMethods(['random', 'systematic', 'stratified']);
+      setAvailableMethods(['random', 'stratified', 'cluster']);
       setSelectedStratColumn('group');
     }
-  }, [populationSize, dataSource]);
+  }, [populationSize, dataSource, numClusters, clusterSize]);
 
   const generatePopulation = () => {
     const pop = [];
-    for (let i = 0; i < populationSize; i++) {
+    const totalSize = numClusters * clusterSize;
+    
+    for (let i = 0; i < totalSize; i++) {
+      const clusterId = Math.floor(i / clusterSize);
       pop.push({
         id: i,
         value: Math.round(Math.random() * 100),
         age: Math.floor(Math.random() * 60) + 18,
-        group: i % 4
+        group: i % 4,
+        cluster: clusterId
       });
     }
     setPopulation(pop);
+    setPopulationSize(totalSize);
     setSample([]);
   };
 
@@ -128,10 +136,10 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
       setCategoricalColumns(categorical);
       
       if (categorical.length > 0) {
-        setAvailableMethods(['random', 'systematic', 'stratified']);
+        setAvailableMethods(['random', 'stratified', 'cluster']);
         setSelectedStratColumn(categorical[0].name);
       } else {
-        setAvailableMethods(['random', 'systematic']);
+        setAvailableMethods(['random', 'cluster']);
         setSelectedStratColumn('');
         if (samplingMethod === 'stratified') {
           setSamplingMethod('random');
@@ -151,7 +159,8 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
             id: idx,
             value: value,
             rawData: row,
-            stratGroup: stratColumn ? row[stratColumn] : (idx % 4)
+            stratGroup: stratColumn ? row[stratColumn] : (idx % 4),
+            cluster: Math.floor(idx / 50)
           };
         }
         return null;
@@ -206,7 +215,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     setSelectedColumn('');
     setCategoricalColumns([]);
     setSelectedStratColumn('');
-    setAvailableMethods(['random', 'systematic']);
+    setAvailableMethods(['random', 'cluster']);
     setDataSource('generated');
     generatePopulation();
   };
@@ -218,11 +227,11 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     setCategoricalColumns(categorical);
     
     if (categorical.length > 0) {
-      setAvailableMethods(['random', 'systematic', 'stratified']);
+      setAvailableMethods(['random', 'stratified', 'cluster']);
       setSelectedStratColumn(categorical[0].name);
       createPopulationFromColumn(fileData, column, categorical[0].name);
     } else {
-      setAvailableMethods(['random', 'systematic']);
+      setAvailableMethods(['random', 'cluster']);
       setSelectedStratColumn('');
       if (samplingMethod === 'stratified') {
         setSamplingMethod('random');
@@ -238,19 +247,13 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
 
   const randomSampling = () => {
     const shuffled = [...population].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, sampleSize);
+    return shuffled.slice(0, sampleSize).map(item => ({
+      ...item,
+      samplingInfo: 'Aleatorio Simple'
+    }));
   };
 
-  const systematicSampling = () => {
-    const k = Math.floor(population.length / sampleSize);
-    const start = Math.floor(Math.random() * k);
-    const sampled = [];
-    for (let i = start; i < population.length && sampled.length < sampleSize; i += k) {
-      sampled.push(population[i]);
-    }
-    return sampled;
-  };
-
+  // CORREGIDO: Muestreo Estratificado Proporcional
   const stratifiedSampling = () => {
     const groups = {};
     population.forEach(p => {
@@ -261,15 +264,55 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     
     const sampled = [];
     const groupKeys = Object.keys(groups);
-    const perGroup = Math.floor(sampleSize / groupKeys.length);
     
+    // PROPORCIONAL: nh = (Nh/N) × n
     groupKeys.forEach(key => {
       const group = groups[key];
+      const nh = Math.round((group.length / population.length) * sampleSize);
       const shuffled = [...group].sort(() => 0.5 - Math.random());
-      sampled.push(...shuffled.slice(0, Math.min(perGroup, group.length)));
+      const selected = shuffled.slice(0, Math.min(nh, group.length));
+      sampled.push(...selected.map(item => ({
+        ...item,
+        samplingInfo: `Estrato: ${key} (${nh}/${group.length})`
+      })));
     });
     
     return sampled;
+  };
+
+  // NUEVO: Muestreo por Conglomerados
+  const clusterSampling = () => {
+    const clusters = {};
+    population.forEach(p => {
+      const clusterId = p.cluster;
+      if (!clusters[clusterId]) clusters[clusterId] = [];
+      clusters[clusterId].push(p);
+    });
+    
+    const clusterIds = Object.keys(clusters);
+    const totalClusters = clusterIds.length;
+    
+    // Calcular cuántos conglomerados necesitamos
+    const avgClusterSize = population.length / totalClusters;
+    const numClustersNeeded = Math.ceil(sampleSize / avgClusterSize);
+    
+    // Seleccionar conglomerados completos al azar
+    const selectedClusters = [...clusterIds]
+      .sort(() => 0.5 - Math.random())
+      .slice(0, numClustersNeeded);
+    
+    // Tomar TODOS los elementos de los conglomerados seleccionados
+    const sampled = [];
+    selectedClusters.forEach(id => {
+      const clusterItems = clusters[id];
+      sampled.push(...clusterItems.map(item => ({
+        ...item,
+        samplingInfo: `Conglomerado ${id} (${clusterItems.length} elementos)`
+      })));
+    });
+    
+    // Si tomamos más de lo necesario, recortar
+    return sampled.slice(0, Math.min(sampled.length, sampleSize * 1.5));
   };
 
   const takeSample = () => {
@@ -281,11 +324,11 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
         case 'random':
           newSample = randomSampling();
           break;
-        case 'systematic':
-          newSample = systematicSampling();
-          break;
         case 'stratified':
           newSample = stratifiedSampling();
+          break;
+        case 'cluster':
+          newSample = clusterSampling();
           break;
         default:
           newSample = randomSampling();
@@ -326,6 +369,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     const csvData = sample.map(item => ({
       ID: item.id,
       Valor: item.value,
+      Método: item.samplingInfo,
       ...item.rawData
     }));
 
@@ -333,7 +377,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `muestra_${samplingMethod}_n${sampleSize}.csv`;
+    link.download = `muestra_${samplingMethod}_n${sample.length}.csv`;
     link.click();
   };
 
@@ -367,36 +411,6 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
       Muestra: sampleHist[i]
     }));
   }, [population, sample]);
-
-  // Interpretación automática del histograma
-  const getHistogramInterpretation = () => {
-    if (sample.length === 0) return null;
-    
-    const meanDiff = Math.abs(parseFloat(popStats.mean) - parseFloat(sampleStats.mean));
-    const medianDiff = Math.abs(parseFloat(popStats.median) - parseFloat(sampleStats.median));
-    
-    if (meanDiff < 5 && medianDiff < 5) {
-      return {
-        icon: '✅',
-        text: 'La muestra conserva la forma general de la población',
-        color: 'emerald'
-      };
-    } else if (meanDiff < 10 && medianDiff < 10) {
-      return {
-        icon: '⚠️',
-        text: 'La muestra tiene algunas diferencias con la población',
-        color: 'yellow'
-      };
-    } else {
-      return {
-        icon: '❌',
-        text: 'La muestra se aleja significativamente de la población',
-        color: 'red'
-      };
-    }
-  };
-
-  const interpretation = getHistogramInterpretation();
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -460,14 +474,14 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                   Sección 1.2
                 </span>
               </div>
-              <h2 className="text-2xl font-black text-white mb-2 tracking-tight">1.2 La población y la muestra</h2>
+              <h2 className="text-2xl font-black text-white mb-2 tracking-tight">1.2 Población, Muestra y Métodos de Muestreo</h2>
               <p className="text-slate-400 leading-relaxed max-w-3xl font-medium mb-3">
-                Explora cómo una muestra representa a la población usando distintos métodos de muestreo.
+                Explora cómo una muestra representa a la población usando distintos métodos de muestreo probabilístico.
               </p>
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
                 <Target className="w-4 h-4 text-indigo-400" />
                 <span className="text-xs font-bold text-indigo-400">
-                  <strong>Objetivo:</strong> Comprender cómo distintos métodos de muestreo afectan la representatividad de una muestra
+                  <strong>Objetivo:</strong> Comprender cómo el método de muestreo afecta la representatividad
                 </span>
               </div>
             </div>
@@ -482,45 +496,57 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
           >
             <div className="flex items-center gap-3">
               <Info className="w-5 h-5 text-blue-400" />
-              <h3 className="text-lg font-black text-white">¿Qué estoy viendo?</h3>
+              <h3 className="text-lg font-black text-white">Guía de Métodos de Muestreo</h3>
             </div>
             {showGuide ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
           </button>
           
           {showGuide && (
             <div className="px-6 pb-6 space-y-4">
-              <div className="bg-slate-900/50 p-4 rounded-xl border border-blue-500/10">
-                <h4 className="font-bold text-blue-400 mb-2 flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4" />
-                  ¿Qué significa esta gráfica?
-                </h4>
-                <p className="text-sm text-slate-400 leading-relaxed">
-                  El histograma compara la <strong className="text-white">distribución de valores</strong> entre la población completa (azul) y tu muestra (rosa). 
-                  Si ambas barras tienen <strong className="text-white">formas similares</strong>, significa que tu muestra es representativa. 
-                  Si son muy diferentes, la muestra podría no reflejar bien la población.
-                </p>
-              </div>
-
               <div className="grid grid-cols-3 gap-4">
                 <div className="bg-slate-900/50 p-4 rounded-xl border border-emerald-500/10">
-                  <h4 className="font-bold text-emerald-400 mb-2 text-sm">Aleatorio Simple</h4>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Cada elemento tiene la misma probabilidad de ser seleccionado. Simple y sin sesgos.
+                  <h4 className="font-bold text-emerald-400 mb-2 text-sm flex items-center gap-2">
+                    <Shuffle className="w-4 h-4" />
+                    Aleatorio Simple (MAS)
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed mb-2">
+                    Cada elemento tiene la <strong className="text-white">misma probabilidad</strong> de ser seleccionado.
                   </p>
-                </div>
-
-                <div className="bg-slate-900/50 p-4 rounded-xl border border-purple-500/10">
-                  <h4 className="font-bold text-purple-400 mb-2 text-sm">Sistemático</h4>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Se selecciona cada k-ésimo elemento. Útil cuando hay un orden natural en los datos.
-                  </p>
+                  <div className="text-xs text-emerald-400 font-bold">✓ Equiprobabilidad e independencia</div>
                 </div>
 
                 <div className="bg-slate-900/50 p-4 rounded-xl border border-pink-500/10">
-                  <h4 className="font-bold text-pink-400 mb-2 text-sm">Estratificado</h4>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Divide la población en grupos y muestrea de cada uno. Asegura representación de todos los subgrupos.
+                  <h4 className="font-bold text-pink-400 mb-2 text-sm flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4" />
+                    Estratificado
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed mb-2">
+                    Divide en grupos homogéneos y muestrea <strong className="text-white">proporcionalmente</strong> de cada estrato.
                   </p>
+                  <div className="text-xs text-pink-400 font-bold">✓ Alta precisión + Compara subgrupos</div>
+                </div>
+
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-purple-500/10">
+                  <h4 className="font-bold text-purple-400 mb-2 text-sm flex items-center gap-2">
+                    <Layers className="w-4 h-4" />
+                    Conglomerados
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed mb-2">
+                    Selecciona <strong className="text-white">grupos completos</strong> heterogéneos internamente pero homogéneos entre sí.
+                  </p>
+                  <div className="text-xs text-purple-400 font-bold">✓ Eficiente con poblaciones dispersas</div>
+                </div>
+              </div>
+
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+                <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold text-blue-400 mb-1">¿Cuándo usar cada método?</h4>
+                  <ul className="text-xs text-slate-300 space-y-1">
+                    <li>• <strong>Aleatorio Simple:</strong> Población homogénea + lista completa disponible</li>
+                    <li>• <strong>Estratificado:</strong> Necesitas precisión + comparar subgrupos</li>
+                    <li>• <strong>Conglomerados:</strong> Población dispersa geográficamente + presupuesto limitado</li>
+                  </ul>
                 </div>
               </div>
             </div>
@@ -562,13 +588,56 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
           </div>
 
           {dataSource === 'generated' && (
-            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
-              <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-slate-300">
-                <strong className="text-blue-400">Datos simulados:</strong> Distribución controlada con fines educativos. 
-                Ideal para experimentar sin necesidad de archivos.
-              </p>
-            </div>
+            <>
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3 mb-6">
+                <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-300">
+                  <strong className="text-blue-400">Datos simulados:</strong> Población organizada en {numClusters} conglomerados de {clusterSize} elementos cada uno.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                    Número de Conglomerados
+                  </label>
+                  <input
+                    type="range"
+                    min="10"
+                    max="40"
+                    step="5"
+                    value={numClusters}
+                    onChange={(e) => setNumClusters(Number(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="text-center mt-2">
+                    <span className="text-2xl font-black bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                      {numClusters}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                    Tamaño por Conglomerado
+                  </label>
+                  <input
+                    type="range"
+                    min="20"
+                    max="100"
+                    step="10"
+                    value={clusterSize}
+                    onChange={(e) => setClusterSize(Number(e.target.value))}
+                    className="w-full"
+                  />
+                  <div className="text-center mt-2">
+                    <span className="text-2xl font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                      {clusterSize}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           {dataSource === 'file' && (
@@ -668,7 +737,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                       <div>
                         <h4 className="font-bold text-yellow-400 mb-1">Sin Columnas Categóricas</h4>
                         <p className="text-xs text-slate-400">
-                          No se detectaron columnas categóricas. Solo estarán disponibles los métodos Aleatorio Simple y Sistemático.
+                          No se detectaron columnas categóricas. Solo estarán disponibles los métodos Aleatorio Simple y Conglomerados.
                         </p>
                       </div>
                     </div>
@@ -688,38 +757,14 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
               </h3>
 
               <div className="space-y-4">
-                {dataSource === 'generated' && (
-                  <div>
-                    <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
-                      Población (N)
-                    </label>
-                    <input
-                      type="range"
-                      min="100"
-                      max="2000"
-                      step="100"
-                      value={populationSize}
-                      onChange={(e) => setPopulationSize(Number(e.target.value))}
-                      className="w-full"
-                    />
-                    <div className="text-center mt-2">
-                      <span className="text-3xl font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                        {populationSize}
-                      </span>
-                    </div>
+                <div className="p-4 bg-slate-800/50 rounded-xl border border-indigo-500/20">
+                  <div className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">
+                    Población (N)
                   </div>
-                )}
-
-                {dataSource === 'file' && (
-                  <div className="p-4 bg-slate-800/50 rounded-xl border border-indigo-500/20">
-                    <div className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">
-                      Población (N)
-                    </div>
-                    <div className="text-3xl font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent text-center">
-                      {populationSize}
-                    </div>
+                  <div className="text-3xl font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent text-center">
+                    {populationSize}
                   </div>
-                )}
+                </div>
 
                 <div>
                   <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
@@ -751,10 +796,10 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
                     <option value="random">Aleatorio Simple</option>
-                    <option value="systematic">Sistemático</option>
                     <option value="stratified" disabled={!availableMethods.includes('stratified')}>
                       Estratificado {!availableMethods.includes('stratified') && '(No disponible)'}
                     </option>
+                    <option value="cluster">Conglomerados</option>
                   </select>
                   
                   {!availableMethods.includes('stratified') && (
@@ -826,124 +871,168 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
           </div>
 
           <div className="lg:col-span-2 space-y-6">
-            {sample.length > 0 && histogramData.length > 0 && (
+            {sample.length > 0 && (
               <>
-                <div className="glass rounded-3xl p-8 min-h-[500px]">
+                {/* TABLA DE MUESTRA - PRINCIPAL */}
+                <div className="glass rounded-3xl p-8">
                   <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-black text-white">Distribución: Población vs Muestra</h3>
+                    <h3 className="text-xl font-black text-white flex items-center gap-2">
+                      <TableIcon className="w-6 h-6 text-indigo-400" />
+                      Muestra Obtenida ({sample.length} elementos)
+                    </h3>
                   </div>
                   
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={histogramData} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                      <XAxis 
-                        dataKey="rango" 
-                        stroke="#94a3b8"
-                        tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
-                        axisLine={false}
-                        tickLine={false}
-                        label={{
-                          value: 'Rango de Valores',
-                          position: 'insideBottom',
-                          offset: -50,
-                          style: { fill: '#94a3b8', fontWeight: 700, fontSize: 12 }
-                        }}
-                      />
-                      <YAxis 
-                        stroke="#94a3b8"
-                        tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
-                        axisLine={false}
-                        tickLine={false}
-                        label={{
-                          value: 'Frecuencia',
-                          angle: -90,
-                          position: 'insideLeft',
-                          style: { textAnchor: 'middle', fill: '#94a3b8', fontWeight: 700, fontSize: 12 }
-                        }}
-                      />
-                      <Tooltip 
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '12px',
-                          fontWeight: 700
-                        }}
-                        cursor={{ fill: 'rgba(99, 102, 241, 0.1)' }}
-                      />
-                      <Legend 
-                        wrapperStyle={{ fontWeight: 700 }}
-                        iconType="circle"
-                        verticalAlign="bottom"
-                        align="center"
-                      />
-                      <Bar dataKey="Población" fill="#6366f1" radius={[8, 8, 0, 0]} />
-                      <Bar dataKey="Muestra" fill="#ec4899" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <div className="bg-slate-950/50 rounded-xl border border-white/10 overflow-hidden">
+                    <div className="overflow-x-auto max-h-96">
+                      <table className="w-full">
+                        <thead className="bg-indigo-500/20 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">ID</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">Valor</th>
+                            <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">Información de Muestreo</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {sample.map((item, idx) => (
+                            <tr key={idx} className="hover:bg-white/5 transition-colors">
+                              <td className="px-4 py-3 text-sm font-bold text-slate-300">{item.id}</td>
+                              <td className="px-4 py-3 text-sm font-bold text-white">{item.value}</td>
+                              <td className="px-4 py-3 text-xs text-slate-400">{item.samplingInfo}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
 
-                  {interpretation && (
-                    <div className={`mt-6 p-4 bg-${interpretation.color}-500/10 border border-${interpretation.color}-500/20 rounded-xl flex items-start gap-3`}>
-                      <span className="text-2xl">{interpretation.icon}</span>
+                  <div className="mt-4 p-4 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl border border-indigo-500/20">
+                    <p className="text-sm text-slate-300 text-center">
+                      <strong className="text-indigo-400">💡 Observa:</strong> {
+                        samplingMethod === 'stratified' 
+                          ? 'Cada estrato contribuye proporcionalmente a su tamaño en la población'
+                          : samplingMethod === 'cluster'
+                          ? 'Se seleccionaron conglomerados completos, tomando todos sus elementos'
+                          : 'Cada elemento fue seleccionado con la misma probabilidad'
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                {/* Sección colapsable de estadísticas */}
+                <div className="glass rounded-3xl overflow-hidden border border-blue-500/20">
+                  <button
+                    onClick={() => setShowStats(!showStats)}
+                    className="w-full flex items-center justify-between p-6 hover:bg-white/5 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <BarChart3 className="w-5 h-5 text-blue-400" />
+                      <h3 className="text-lg font-black text-white">Análisis Estadístico (Avanzado)</h3>
+                    </div>
+                    {showStats ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                  </button>
+                  
+                  {showStats && (
+                    <div className="px-6 pb-6 space-y-6">
+                      <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex items-start gap-3">
+                        <Info className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+                        <p className="text-xs text-slate-300">
+                          <strong className="text-yellow-400">Nota:</strong> Estos conceptos (media, mediana, histogramas) se explicarán en detalle en próximas secciones.
+                        </p>
+                      </div>
+
                       <div>
-                        <h4 className={`font-bold text-${interpretation.color}-400 mb-1`}>Interpretación Automática</h4>
-                        <p className="text-sm text-slate-300">{interpretation.text}</p>
+                        <h4 className="text-lg font-black text-white mb-4">Distribución: Población vs Muestra</h4>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={histogramData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                            <XAxis 
+                              dataKey="rango" 
+                              stroke="#94a3b8"
+                              tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
+                              axisLine={false}
+                              tickLine={false}
+                              label={{
+                                value: 'Rango de Valores',
+                                position: 'insideBottom',
+                                offset: -40,
+                                style: { fill: '#94a3b8', fontWeight: 700, fontSize: 12 }
+                              }}
+                            />
+                            <YAxis 
+                              stroke="#94a3b8"
+                              tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
+                              axisLine={false}
+                              tickLine={false}
+                              label={{
+                                value: 'Frecuencia',
+                                angle: -90,
+                                position: 'insideLeft',
+                                style: { textAnchor: 'middle', fill: '#94a3b8', fontWeight: 700, fontSize: 12 }
+                              }}
+                            />
+                            <Tooltip 
+                              contentStyle={{
+                                backgroundColor: '#1e293b',
+                                border: '1px solid #334155',
+                                borderRadius: '12px',
+                                fontWeight: 700
+                              }}
+                              cursor={{ fill: 'rgba(99, 102, 241, 0.1)' }}
+                            />
+                            <Legend 
+                              wrapperStyle={{ fontWeight: 700 }}
+                              iconType="circle"
+                              verticalAlign="bottom"
+                              align="center"
+                            />
+                            <Bar dataKey="Población" fill="#6366f1" radius={[8, 8, 0, 0]} />
+                            <Bar dataKey="Muestra" fill="#ec4899" radius={[8, 8, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <div className="text-center">
+                            <h4 className="font-bold text-indigo-400 mb-4">Población</h4>
+                          </div>
+                          
+                          {[
+                            { label: "Media (μ)", value: popStats.mean, color: "from-blue-500 to-cyan-500" },
+                            { label: "Mediana", value: popStats.median, color: "from-indigo-500 to-purple-500" },
+                          ].map((stat, i) => (
+                            <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-indigo-500/20">
+                              <div className="text-xs text-slate-500 uppercase font-bold mb-1">{stat.label}</div>
+                              <div className={`text-3xl font-black bg-gradient-to-r ${stat.color} bg-clip-text text-transparent`}>
+                                {stat.value}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="text-center">
+                            <h4 className="font-bold text-pink-400 mb-4">Muestra</h4>
+                          </div>
+                          
+                          {[
+                            { label: "Media (x̄)", value: sampleStats.mean, diff: Math.abs(popStats.mean - sampleStats.mean).toFixed(2) },
+                            { label: "Mediana", value: sampleStats.median, diff: Math.abs(popStats.median - sampleStats.median).toFixed(2) },
+                          ].map((stat, i) => (
+                            <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-pink-500/20">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="text-xs text-slate-500 uppercase font-bold">{stat.label}</div>
+                                <div className="text-xs text-slate-500">Δ: {stat.diff}</div>
+                              </div>
+                              <div className={`text-3xl font-black bg-gradient-to-r ${i === 0 ? 'from-blue-500 to-cyan-500' : 'from-indigo-500 to-purple-500'} bg-clip-text text-transparent`}>
+                                {stat.value}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   )}
-                </div>
-
-                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
-                  <h3 className="text-xl font-black text-white mb-6">Comparación Estadística</h3>
-                  
-                  <div className="grid grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <div className="text-center">
-                        <h4 className="font-bold text-indigo-400 mb-4">Población</h4>
-                      </div>
-                      
-                      {[
-                        { label: "Media (μ)", value: popStats.mean, color: "from-blue-500 to-cyan-500" },
-                        { label: "Mediana", value: popStats.median, color: "from-indigo-500 to-purple-500" },
-                        { label: "Desv. Est. (σ)", value: popStats.stdDev, color: "from-purple-500 to-pink-500" },
-                      ].map((stat, i) => (
-                        <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-indigo-500/20">
-                          <div className="text-xs text-slate-500 uppercase font-bold mb-1">{stat.label}</div>
-                          <div className={`text-3xl font-black bg-gradient-to-r ${stat.color} bg-clip-text text-transparent`}>
-                            {stat.value}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="text-center">
-                        <h4 className="font-bold text-pink-400 mb-4">Muestra</h4>
-                      </div>
-                      
-                      {[
-                        { label: "Media (x̄)", value: sampleStats.mean, diff: Math.abs(popStats.mean - sampleStats.mean).toFixed(2) },
-                        { label: "Mediana", value: sampleStats.median, diff: Math.abs(popStats.median - sampleStats.median).toFixed(2) },
-                        { label: "Desv. Est. (s)", value: sampleStats.stdDev, diff: Math.abs(popStats.stdDev - sampleStats.stdDev).toFixed(2) },
-                      ].map((stat, i) => (
-                        <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-pink-500/20">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="text-xs text-slate-500 uppercase font-bold">{stat.label}</div>
-                            <div className="text-xs text-slate-500">Δ: {stat.diff}</div>
-                          </div>
-                          <div className={`text-3xl font-black bg-gradient-to-r ${i === 0 ? 'from-blue-500 to-cyan-500' : i === 1 ? 'from-indigo-500 to-purple-500' : 'from-purple-500 to-pink-500'} bg-clip-text text-transparent`}>
-                            {stat.value}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-6 p-4 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl border border-indigo-500/20">
-                    <p className="text-sm text-slate-300 text-center">
-                      <strong className="text-indigo-400">💡 Observación:</strong> Una muestra bien tomada debe tener 
-                      estadísticas similares a la población. Mientras más grande la muestra, más precisas las estimaciones.
-                    </p>
-                  </div>
                 </div>
               </>
             )}
@@ -953,7 +1042,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                 <div className="relative mb-6">
                   <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-2xl" />
                   <div className="relative w-32 h-32 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
-                    <BarChart3 className="w-16 h-16 text-slate-700" />
+                    <TableIcon className="w-16 h-16 text-slate-700" />
                   </div>
                 </div>
                 <h3 className="text-2xl font-black text-white mb-2">Toma tu Primera Muestra</h3>
@@ -975,7 +1064,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                 <div>
                   <h4 className="font-black text-lg text-indigo-400 mb-2">Población (N)</h4>
                   <p className="text-sm text-slate-400 leading-relaxed">
-                    Conjunto completo de elementos que queremos estudiar.
+                    Conjunto completo de todos los elementos que comparten una característica común y queremos estudiar.
                   </p>
                 </div>
               </div>
@@ -987,7 +1076,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                 <div>
                   <h4 className="font-black text-lg text-pink-400 mb-2">Muestra (n)</h4>
                   <p className="text-sm text-slate-400 leading-relaxed">
-                    Subconjunto representativo de la población.
+                    Subconjunto representativo de la población seleccionado para estudio cuando analizar toda la población es inviable.
                   </p>
                 </div>
               </div>
@@ -999,7 +1088,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                 <div>
                   <h4 className="font-black text-lg text-purple-400 mb-2">Representatividad</h4>
                   <p className="text-sm text-slate-400 leading-relaxed">
-                    Una buena muestra refleja las características de la población.
+                    Una buena muestra refleja las características de la población. El muestreo probabilístico garantiza esto.
                   </p>
                 </div>
               </div>
@@ -1007,11 +1096,11 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
 
             <div className="bg-slate-950/50 p-6 rounded-2xl border border-cyan-500/20">
               <div className="flex items-start gap-4">
-                <div className="text-4xl">📊</div>
+                <div className="text-4xl">🔀</div>
                 <div>
-                  <h4 className="font-black text-lg text-cyan-400 mb-2">Error Muestral</h4>
+                  <h4 className="font-black text-lg text-cyan-400 mb-2">Muestreo Probabilístico</h4>
                   <p className="text-sm text-slate-400 leading-relaxed">
-                    Diferencia entre estadísticas de muestra y parámetros poblacionales.
+                    Cada elemento tiene una probabilidad conocida de ser incluido. Esto permite generalizar resultados a toda la población.
                   </p>
                 </div>
               </div>
