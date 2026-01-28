@@ -24,29 +24,82 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   const [showStats, setShowStats] = useState(false);
   const [numClusters, setNumClusters] = useState(20);
   const [clusterSize, setClusterSize] = useState(50);
+
+  // --------------------------------------------------------
+  // UTILIDADES: Fisher-Yates shuffle y normalización
+  // --------------------------------------------------------
+  const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+  const shuffleInPlace = (arr) => {
+    // Fisher–Yates shuffle
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = randInt(0, i);
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
+
+  const shuffleCopy = (arr) => shuffleInPlace([...arr]);
+
+  const normalizeKey = (v) => {
+    if (v === null || v === undefined) return "Sin dato";
+    const s = String(v).trim();
+    return s.length ? s : "Sin dato";
+  };
+
+  // --------------------------------------------------------
+  // GENERACIÓN DE POBLACIÓN CON ESTRATOS PROPORCIONALES EXACTOS
+  // --------------------------------------------------------
+  const STRATA_LABELS = ["Ingeniería", "Marketing", "Soporte", "Ventas"];
+  const STRATA_WEIGHTS = [0.30, 0.20, 0.10, 0.40]; // Proporciones exactas
   
   useEffect(() => {
     if (dataSource === 'generated') {
       generatePopulation();
       setAvailableMethods(['random', 'stratified', 'cluster']);
-      setSelectedStratColumn('group');
+      setSelectedStratColumn('stratGroup');
     }
-  }, [populationSize, dataSource, numClusters, clusterSize]);
+  }, [dataSource, numClusters, clusterSize]);
 
   const generatePopulation = () => {
     const pop = [];
     const totalSize = numClusters * clusterSize;
     
+    // 1) Calcular tamaños exactos por estrato
+    const targetCounts = STRATA_WEIGHTS.map(w => Math.floor(w * totalSize));
+    
+    // 2) Ajuste por redondeo para que sumen totalSize
+    let diff = totalSize - targetCounts.reduce((a, b) => a + b, 0);
+    let idx = 0;
+    while (diff > 0) {
+      targetCounts[idx % targetCounts.length] += 1;
+      diff--;
+      idx++;
+    }
+    
+    // 3) Crear una lista de estratos con conteos exactos
+    const strataPool = [];
+    targetCounts.forEach((count, sIdx) => {
+      for (let k = 0; k < count; k++) {
+        strataPool.push(STRATA_LABELS[sIdx]);
+      }
+    });
+    
+    // 4) Barajar estratos para no dejar bloques
+    shuffleInPlace(strataPool);
+    
+    // 5) Construir población
     for (let i = 0; i < totalSize; i++) {
       const clusterId = Math.floor(i / clusterSize);
       pop.push({
         id: i,
         value: Math.round(Math.random() * 100),
         age: Math.floor(Math.random() * 60) + 18,
-        group: i % 4,
+        stratGroup: strataPool[i], // ✅ Proporciones exactas 30/20/10/40
         cluster: clusterId
       });
     }
+    
     setPopulation(pop);
     setPopulationSize(totalSize);
     setSample([]);
@@ -159,7 +212,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
             id: idx,
             value: value,
             rawData: row,
-            stratGroup: stratColumn ? row[stratColumn] : (idx % 4),
+            stratGroup: stratColumn ? normalizeKey(row[stratColumn]) : normalizeKey(idx % 4),
             cluster: Math.floor(idx / 50)
           };
         }
@@ -245,74 +298,126 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     createPopulationFromColumn(fileData, selectedColumn, stratCol);
   };
 
+  // --------------------------------------------------------
+  // 1) MAS (Aleatorio Simple) con Fisher-Yates
+  // --------------------------------------------------------
   const randomSampling = () => {
-    const shuffled = [...population].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, sampleSize).map(item => ({
+    const n = Math.min(sampleSize, population.length);
+    const shuffled = shuffleCopy(population);
+    return shuffled.slice(0, n).map((item) => ({
       ...item,
-      samplingInfo: 'Aleatorio Simple'
+      samplingInfo: "Aleatorio Simple (MAS)"
     }));
   };
 
-  // CORREGIDO: Muestreo Estratificado Proporcional
-  const stratifiedSampling = () => {
-    const groups = {};
-    population.forEach(p => {
-      const key = p.stratGroup;
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(p);
-    });
-    
-    const sampled = [];
-    const groupKeys = Object.keys(groups);
-    
-    // PROPORCIONAL: nh = (Nh/N) × n
-    groupKeys.forEach(key => {
-      const group = groups[key];
-      const nh = Math.round((group.length / population.length) * sampleSize);
-      const shuffled = [...group].sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, Math.min(nh, group.length));
-      sampled.push(...selected.map(item => ({
-        ...item,
-        samplingInfo: `Estrato: ${key} (${nh}/${group.length})`
-      })));
-    });
-    
-    return sampled;
+  // --------------------------------------------------------
+// 2) Estratificado Proporcional con normalización de llaves
+// --------------------------------------------------------
+const stratifiedSampling = () => {
+
+  // ✅ Decide de dónde sale el estrato:
+  // - Si dataSource === 'file': usa la columna seleccionada (selectedStratColumn) desde rawData
+  // - Si no: usa p.stratGroup (datos generados)
+  const stratKey = (p) => {
+    if (dataSource === "file" && selectedStratColumn && p.rawData) {
+      return normalizeKey(p.rawData[selectedStratColumn]);
+    }
+    return normalizeKey(p.stratGroup);
   };
 
-  // NUEVO: Muestreo por Conglomerados
-  const clusterSampling = () => {
-    const clusters = {};
-    population.forEach(p => {
-      const clusterId = p.cluster;
-      if (!clusters[clusterId]) clusters[clusterId] = [];
-      clusters[clusterId].push(p);
+  // Agrupar por estrato
+  const groups = {};
+  population.forEach((p) => {
+    const key = stratKey(p); // 👈 CAMBIO AQUÍ
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  });
+
+  const keys = Object.keys(groups);
+  const N = population.length;
+  const n = Math.min(sampleSize, N);
+
+  // Cuotas crudas
+  const quotas = keys.map((k) => {
+    const Nh = groups[k].length;
+    const raw = (Nh / N) * n;
+    const base = Math.floor(raw);
+    return { k, Nh, raw, base, frac: raw - base };
+  });
+
+  // Suma base y residuo
+  let assigned = quotas.reduce((acc, q) => acc + q.base, 0);
+  let remaining = n - assigned;
+
+  // Reparto del residuo por mayores fracciones (sin exceder Nh)
+  quotas
+    .sort((a, b) => b.frac - a.frac)
+    .forEach((q) => {
+      if (remaining <= 0) return;
+      if (q.base < q.Nh) {
+        q.base += 1;
+        remaining -= 1;
+      }
     });
-    
-    const clusterIds = Object.keys(clusters);
-    const totalClusters = clusterIds.length;
-    
-    // Calcular cuántos conglomerados necesitamos
-    const avgClusterSize = population.length / totalClusters;
-    const numClustersNeeded = Math.ceil(sampleSize / avgClusterSize);
-    
-    // Seleccionar conglomerados completos al azar
-    const selectedClusters = [...clusterIds]
-      .sort(() => 0.5 - Math.random())
-      .slice(0, numClustersNeeded);
-    
-    // Tomar TODOS los elementos de los conglomerados seleccionados
-    const sampled = [];
-    selectedClusters.forEach(id => {
-      const clusterItems = clusters[id];
-      sampled.push(...clusterItems.map(item => ({
+
+  // Muestrear dentro de cada estrato con Fisher-Yates
+  const sampled = [];
+  quotas.forEach((q) => {
+    const group = groups[q.k];
+    const nh = Math.min(q.base, group.length);
+    const shuffled = shuffleCopy(group);
+    sampled.push(
+      ...shuffled.slice(0, nh).map((item) => ({
         ...item,
-        samplingInfo: `Conglomerado ${id} (${clusterItems.length} elementos)`
-      })));
+        samplingInfo: `Estrato: ${q.k} (${nh}/${group.length})`,
+      }))
+    );
+  });
+
+  // Seguridad: tamaño exacto n
+  return sampled.slice(0, n);
+};
+
+  // --------------------------------------------------------
+  // 3) Conglomerados (1 etapa, conglomerados COMPLETOS)
+  // --------------------------------------------------------
+  const clusterSampling = () => {
+    // Agrupar por conglomerado con normalización
+    const clusters = {};
+    population.forEach((p) => {
+      const cid = normalizeKey(p.cluster);
+      if (!clusters[cid]) clusters[cid] = [];
+      clusters[cid].push(p);
     });
-    
-    // Si tomamos más de lo necesario, recortar
-    return sampled.slice(0, Math.min(sampled.length, sampleSize * 1.5));
+
+    const clusterIds = Object.keys(clusters);
+    if (clusterIds.length === 0) return [];
+
+    // Seleccionar conglomerados al azar hasta alcanzar o superar n objetivo
+    const shuffledClusterIds = shuffleCopy(clusterIds);
+
+    const selected = [];
+    let count = 0;
+    for (const cid of shuffledClusterIds) {
+      selected.push(cid);
+      count += clusters[cid].length;
+      if (count >= sampleSize) break;
+    }
+
+    // Tomar TODOS los elementos de los conglomerados elegidos (SIN RECORTE)
+    const sampled = [];
+    selected.forEach((cid) => {
+      const items = clusters[cid];
+      sampled.push(
+        ...items.map((item) => ({
+          ...item,
+          samplingInfo: `Conglomerado ${cid} (${items.length} elementos)`
+        }))
+      );
+    });
+
+    // ✅ NO recortamos: devolvemos todos los elementos
+    return sampled;
   };
 
   const takeSample = () => {
@@ -347,7 +452,12 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     const median = sorted.length % 2 === 0
       ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
       : sorted[Math.floor(sorted.length / 2)];
-    const variance = values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / values.length;
+    
+    // Varianza muestral (n-1) para muestra
+    const n = values.length;
+    const variance = n > 1 
+      ? values.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / (n - 1)
+      : 0;
     const stdDev = Math.sqrt(variance);
     
     return {
@@ -384,32 +494,50 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   const popStats = useMemo(() => calculateStats(population), [population]);
   const sampleStats = useMemo(() => calculateStats(sample), [sample]);
 
+  // --------------------------------------------------------
+  // 4) Histograma robusto: evita binSize=0 cuando max===min
+  // --------------------------------------------------------
   const histogramData = useMemo(() => {
     if (population.length === 0) return [];
-    
+
     const bins = 10;
-    const min = Math.min(...population.map(p => p.value));
-    const max = Math.max(...population.map(p => p.value));
+    const valuesPop = population.map((p) => p.value);
+    const min = Math.min(...valuesPop);
+    const max = Math.max(...valuesPop);
+
+    // ✅ Caso especial: todos los valores iguales
+    if (max === min) {
+      return [
+        {
+          rango: `${min}`,
+          Población: population.length,
+          Muestra: sample.length
+        }
+      ];
+    }
+
     const binSize = (max - min) / bins;
-    
+
     const popHist = Array(bins).fill(0);
     const sampleHist = Array(bins).fill(0);
-    
-    population.forEach(p => {
+
+    population.forEach((p) => {
       const binIndex = Math.min(Math.floor((p.value - min) / binSize), bins - 1);
       popHist[binIndex]++;
     });
-    
-    sample.forEach(s => {
+
+    sample.forEach((s) => {
       const binIndex = Math.min(Math.floor((s.value - min) / binSize), bins - 1);
       sampleHist[binIndex]++;
     });
-    
-    return Array(bins).fill(0).map((_, i) => ({
-      rango: `${(min + i * binSize).toFixed(0)}`,
-      Población: popHist[i],
-      Muestra: sampleHist[i]
-    }));
+
+    return Array(bins)
+      .fill(0)
+      .map((_, i) => ({
+        rango: `${(min + i * binSize).toFixed(0)}`,
+        Población: popHist[i],
+        Muestra: sampleHist[i]
+      }));
   }, [population, sample]);
 
   return (
@@ -592,7 +720,8 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3 mb-6">
                 <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-slate-300">
-                  <strong className="text-blue-400">Datos simulados:</strong> Población organizada en {numClusters} conglomerados de {clusterSize} elementos cada uno.
+                  <strong className="text-blue-400">Datos simulados:</strong> Población organizada en {numClusters} conglomerados de {clusterSize} elementos cada uno. 
+                  Estratos: Ingeniería (30%), Marketing (20%), Soporte (10%), Ventas (40%).
                 </p>
               </div>
 
@@ -768,7 +897,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
 
                 <div>
                   <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
-                    Muestra (n)
+                    Muestra (n objetivo)
                   </label>
                   <input
                     type="range"
@@ -876,10 +1005,18 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                 {/* TABLA DE MUESTRA - PRINCIPAL */}
                 <div className="glass rounded-3xl p-8">
                   <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-black text-white flex items-center gap-2">
-                      <TableIcon className="w-6 h-6 text-indigo-400" />
-                      Muestra Obtenida ({sample.length} elementos)
-                    </h3>
+                    <div>
+                      <h3 className="text-xl font-black text-white flex items-center gap-2">
+                        <TableIcon className="w-6 h-6 text-indigo-400" />
+                        Muestra Obtenida ({sample.length} elementos)
+                      </h3>
+                      {samplingMethod === 'cluster' && (
+                        <div className="mt-2 text-xs text-slate-400">
+                          n objetivo: <span className="text-white font-bold">{sampleSize}</span> · n obtenido: <span className="text-white font-bold">{sample.length}</span>
+                          {sample.length > sampleSize && <span className="text-purple-400 ml-2">✓ Conglomerados completos</span>}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
                   <div className="bg-slate-950/50 rounded-xl border border-white/10 overflow-hidden">
@@ -894,7 +1031,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                           {sample.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-white/5 transition-colors">
+                            <tr key={`${item.id}-${idx}`} className="hover:bg-white/5 transition-colors">
                               <td className="px-4 py-3 text-sm font-bold text-slate-300">{item.id}</td>
                               <td className="px-4 py-3 text-sm font-bold text-white">{item.value}</td>
                               <td className="px-4 py-3 text-xs text-slate-400">{item.samplingInfo}</td>
@@ -911,7 +1048,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                         samplingMethod === 'stratified' 
                           ? 'Cada estrato contribuye proporcionalmente a su tamaño en la población'
                           : samplingMethod === 'cluster'
-                          ? 'Se seleccionaron conglomerados completos, tomando todos sus elementos'
+                          ? 'Se seleccionaron conglomerados completos, tomando TODOS sus elementos (el tamaño final puede variar)'
                           : 'Cada elemento fue seleccionado con la misma probabilidad'
                       }
                     </p>
@@ -991,46 +1128,48 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                         </ResponsiveContainer>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                          <div className="text-center">
-                            <h4 className="font-bold text-indigo-400 mb-4">Población</h4>
-                          </div>
-                          
-                          {[
-                            { label: "Media (μ)", value: popStats.mean, color: "from-blue-500 to-cyan-500" },
-                            { label: "Mediana", value: popStats.median, color: "from-indigo-500 to-purple-500" },
-                          ].map((stat, i) => (
-                            <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-indigo-500/20">
-                              <div className="text-xs text-slate-500 uppercase font-bold mb-1">{stat.label}</div>
-                              <div className={`text-3xl font-black bg-gradient-to-r ${stat.color} bg-clip-text text-transparent`}>
-                                {stat.value}
-                              </div>
+                      {popStats && sampleStats && (
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="space-y-4">
+                            <div className="text-center">
+                              <h4 className="font-bold text-indigo-400 mb-4">Población</h4>
                             </div>
-                          ))}
-                        </div>
+                            
+                            {[
+                              { label: "Media (μ)", value: popStats.mean, color: "from-blue-500 to-cyan-500" },
+                              { label: "Mediana", value: popStats.median, color: "from-indigo-500 to-purple-500" },
+                            ].map((stat, i) => (
+                              <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-indigo-500/20">
+                                <div className="text-xs text-slate-500 uppercase font-bold mb-1">{stat.label}</div>
+                                <div className={`text-3xl font-black bg-gradient-to-r ${stat.color} bg-clip-text text-transparent`}>
+                                  {stat.value}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
 
-                        <div className="space-y-4">
-                          <div className="text-center">
-                            <h4 className="font-bold text-pink-400 mb-4">Muestra</h4>
-                          </div>
-                          
-                          {[
-                            { label: "Media (x̄)", value: sampleStats.mean, diff: Math.abs(popStats.mean - sampleStats.mean).toFixed(2) },
-                            { label: "Mediana", value: sampleStats.median, diff: Math.abs(popStats.median - sampleStats.median).toFixed(2) },
-                          ].map((stat, i) => (
-                            <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-pink-500/20">
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="text-xs text-slate-500 uppercase font-bold">{stat.label}</div>
-                                <div className="text-xs text-slate-500">Δ: {stat.diff}</div>
-                              </div>
-                              <div className={`text-3xl font-black bg-gradient-to-r ${i === 0 ? 'from-blue-500 to-cyan-500' : 'from-indigo-500 to-purple-500'} bg-clip-text text-transparent`}>
-                                {stat.value}
-                              </div>
+                          <div className="space-y-4">
+                            <div className="text-center">
+                              <h4 className="font-bold text-pink-400 mb-4">Muestra</h4>
                             </div>
-                          ))}
+                            
+                            {[
+                              { label: "Media (x̄)", value: sampleStats.mean, diff: Math.abs(popStats.mean - sampleStats.mean).toFixed(2) },
+                              { label: "Mediana", value: sampleStats.median, diff: Math.abs(popStats.median - sampleStats.median).toFixed(2) },
+                            ].map((stat, i) => (
+                              <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-pink-500/20">
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="text-xs text-slate-500 uppercase font-bold">{stat.label}</div>
+                                  <div className="text-xs text-slate-500">Δ: {stat.diff}</div>
+                                </div>
+                                <div className={`text-3xl font-black bg-gradient-to-r ${i === 0 ? 'from-blue-500 to-cyan-500' : 'from-indigo-500 to-purple-500'} bg-clip-text text-transparent`}>
+                                  {stat.value}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   )}
                 </div>
