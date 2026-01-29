@@ -118,7 +118,7 @@ const Lab1_1 = ({ goHome }) => {
           options: [
             { text: "Descriptiva", correct: false },
             { text: "Inferencial", correct: true },
-            { text: "Ninguna", correct: false }
+            { text: "Exploratoria", correct: false }
           ],
           explanation: "Necesita probar hipótesis sobre la efectividad del tratamiento en toda la población"
         },
@@ -431,7 +431,7 @@ const Lab1_1 = ({ goHome }) => {
               </div>
 
               <p className="text-slate-300 leading-relaxed">
-                Utiliza muestras para hacer <strong className="text-purple-400">predicciones, estimaciones y conclusiones</strong> 
+                Utiliza muestras para hacer <strong className="text-purple-400">predicciones, estimaciones y conclusiones </strong> 
                 sobre una población completa mediante pruebas de hipótesis y modelos estadísticos.
               </p>
 
