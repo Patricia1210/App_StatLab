@@ -26,6 +26,11 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   const [numClusters, setNumClusters] = useState(20);
   const [numClustersToSelect, setNumClustersToSelect] = useState(2);
   const [selectedClusterIds, setSelectedClusterIds] = useState([]); // IDs de conglomerados seleccionados
+  const [strataSummary, setStrataSummary] = useState([]); // Resumen de estratos para muestreo estratificado
+  const [selectedClusterColumn, setSelectedClusterColumn] = useState('');
+  const [clusterColumns, setClusterColumns] = useState([]); // candidatas a conglomerados
+  const [hideUnselectedClusters, setHideUnselectedClusters] = useState(false);
+
 
   // --------------------------------------------------------
   // UTILIDADES: Fisher-Yates shuffle y normalización
@@ -46,6 +51,10 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     if (v === null || v === undefined) return "Sin dato";
     const s = String(v).trim();
     return s.length ? s : "Sin dato";
+  };
+
+  const normalizeColName = (name) => {
+    return String(name).toLowerCase().trim();
   };
 
   // --------------------------------------------------------
@@ -75,6 +84,8 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
       setAvailableMethods(['random', 'stratified', 'cluster']);
       setSelectedStratColumn('stratGroup');
       setSelectedColumnLabel('Salario mensual (MXN)');
+      setSelectedClusterIds([]);
+      setStrataSummary([]);
     }
   }, [dataSource, numClusters]);
 
@@ -138,22 +149,43 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     columns.forEach(col => {
       if (col === numericColumn) return;
 
-      const values = data.map(row => row[col]).filter(v => v !== null && v !== undefined);
-      const uniqueValues = [...new Set(values)];
-      const isNumeric = values.every(v => typeof v === 'number' || !isNaN(parseFloat(v)));
+      const values = data
+        .map(row => row[col])
+        .filter(v => v !== null && v !== undefined && String(v).trim() !== "");
+
+      const uniqueValues = [...new Set(values.map(v => normalizeKey(v)))];
       const uniqueCount = uniqueValues.length;
 
-      if (!isNumeric || (isNumeric && uniqueCount <= 20)) {
-        categorical.push({
-          name: col,
-          uniqueCount: uniqueCount,
-          sampleValues: uniqueValues.slice(0, 5),
-          isNumeric: isNumeric
-        });
-      }
+      // Heurística: si es string, suele ser categórica; si es numérica pero pocos valores, también.
+      const isNumeric = values.every(v => typeof v === 'number' || !isNaN(parseFloat(v)));
+
+      categorical.push({
+        name: col,
+        uniqueCount,
+        sampleValues: uniqueValues.slice(0, 5),
+        isNumeric
+      });
     });
 
     return categorical;
+  };
+
+  const pickBestStrataColumn = (cats) => {
+    // Estratos: pocas categorías (2–20 ideal)
+    const candidates = cats
+      .filter(c => c.uniqueCount >= 2 && c.uniqueCount <= 20)
+      .sort((a, b) => a.uniqueCount - b.uniqueCount);
+
+    return candidates[0]?.name || '';
+  };
+
+  const pickBestClusterColumn = (cats) => {
+    // Conglomerados: pocas/medias (2–50 ideal, porque "Sede" suele ser 3, 5, 10...)
+    const candidates = cats
+      .filter(c => c.uniqueCount >= 2 && c.uniqueCount <= 50)
+      .sort((a, b) => a.uniqueCount - b.uniqueCount);
+
+    return candidates[0]?.name || '';
   };
 
   const processFile = async (file) => {
@@ -204,10 +236,18 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     setFileData(data);
     setAvailableColumns(columns);
 
-    const numericColumn = columns.find(col => {
-      const value = data[0]?.[col];
-      return typeof value === 'number' || !isNaN(parseFloat(value));
-    });
+    // ✅ Detectar columna numérica de forma robusta
+    const isMostlyNumeric = (col) => {
+      const sample = data.slice(0, 20);
+      const nums = sample
+        .map(r => r?.[col])
+        .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
+        .map(v => parseFloat(v))
+        .filter(v => !isNaN(v));
+      return nums.length >= Math.max(5, Math.floor(sample.length * 0.6));
+    };
+
+    const numericColumn = columns.find(isMostlyNumeric);
 
     if (numericColumn) {
       setSelectedColumn(numericColumn);
@@ -216,37 +256,66 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
       const categorical = detectCategoricalColumns(data, columns, numericColumn);
       setCategoricalColumns(categorical);
 
-      if (categorical.length > 0) {
+      let bestStrata = pickBestStrataColumn(categorical);
+      let bestCluster = pickBestClusterColumn(categorical);
+
+      // ✅ Evitar que estrato y conglomerado sean la misma columna por default
+      if (bestStrata && bestCluster && normalizeColName(bestStrata) === normalizeColName(bestCluster)) {
+        // intenta buscar otro estrato válido 2–20 que NO sea el cluster
+        const alt = categorical
+          .filter(c => c.uniqueCount >= 2 && c.uniqueCount <= 20)
+          .map(c => c.name)
+          .find(name => normalizeColName(name) !== normalizeColName(bestCluster));
+
+        bestStrata = alt || ""; // si no hay alternativa, estratos quedan vacíos
+      }
+
+      setSelectedStratColumn(bestStrata);
+      setSelectedClusterColumn(bestCluster);
+
+      // columnas candidatas para clusters (para UI)
+      setClusterColumns(
+        categorical
+          .filter(c => c.uniqueCount >= 2 && c.uniqueCount <= 50)
+          .sort((a, b) => a.uniqueCount - b.uniqueCount)
+      );
+
+      if (bestStrata) {
         setAvailableMethods(['random', 'stratified', 'cluster']);
-        setSelectedStratColumn(categorical[0].name);
       } else {
         setAvailableMethods(['random', 'cluster']);
-        setSelectedStratColumn('');
         if (samplingMethod === 'stratified') {
           setSamplingMethod('random');
         }
       }
 
-      createPopulationFromColumn(data, numericColumn, categorical.length > 0 ? categorical[0].name : null);
+      createPopulationFromColumn(data, numericColumn, bestStrata || null, bestCluster || null);
     }
   };
 
-  const createPopulationFromColumn = (data, column, stratColumn = null) => {
+  const createPopulationFromColumn = (data, column, stratColumn = null, clusterColumn = null) => {
     const pop = data
       .map((row, idx) => {
         const value = parseFloat(row[column]);
-        if (!isNaN(value)) {
-          return {
-            id: idx,
-            value: value,
-            rawData: row,
-            stratGroup: stratColumn ? normalizeKey(row[stratColumn]) : normalizeKey(idx % 4),
-            cluster: Math.floor(idx / 50)
-          };
-        }
-        return null;
+        if (isNaN(value)) return null;
+
+        const stratValue = stratColumn ? normalizeKey(row[stratColumn]) : "Sin estrato";
+
+        // ✅ Si hay columna de conglomerados, úsala (ej. Sede)
+        // ✅ Si no, fallback al viejo idx/50 (solo como respaldo)
+        const clusterValue = clusterColumn
+          ? normalizeKey(row[clusterColumn])
+          : String(Math.floor(idx / 50));
+
+        return {
+          id: idx,
+          value,
+          rawData: row,
+          stratGroup: stratValue,
+          cluster: clusterValue
+        };
       })
-      .filter(item => item !== null);
+      .filter(Boolean);
 
     setPopulation(pop);
     setPopulationSize(pop.length);
@@ -309,23 +378,44 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     const categorical = detectCategoricalColumns(fileData, availableColumns, column);
     setCategoricalColumns(categorical);
 
-    if (categorical.length > 0) {
+    let bestStrata = pickBestStrataColumn(categorical);
+    let bestCluster = pickBestClusterColumn(categorical);
+
+    // ✅ Evitar que estrato y conglomerado sean la misma columna por default
+    if (bestStrata && bestCluster && normalizeColName(bestStrata) === normalizeColName(bestCluster)) {
+      // intenta buscar otro estrato válido 2–20 que NO sea el cluster
+      const alt = categorical
+        .filter(c => c.uniqueCount >= 2 && c.uniqueCount <= 20)
+        .map(c => c.name)
+        .find(name => normalizeColName(name) !== normalizeColName(bestCluster));
+
+      bestStrata = alt || ""; // si no hay alternativa, estratos quedan vacíos
+    }
+
+    setSelectedStratColumn(bestStrata);
+    setSelectedClusterColumn(bestCluster);
+
+    setClusterColumns(
+      categorical
+        .filter(c => c.uniqueCount >= 2 && c.uniqueCount <= 50)
+        .sort((a, b) => a.uniqueCount - b.uniqueCount)
+    );
+
+    if (bestStrata) {
       setAvailableMethods(['random', 'stratified', 'cluster']);
-      setSelectedStratColumn(categorical[0].name);
-      createPopulationFromColumn(fileData, column, categorical[0].name);
     } else {
       setAvailableMethods(['random', 'cluster']);
-      setSelectedStratColumn('');
       if (samplingMethod === 'stratified') {
         setSamplingMethod('random');
       }
-      createPopulationFromColumn(fileData, column, null);
     }
+
+    createPopulationFromColumn(fileData, column, bestStrata || null, bestCluster || null);
   };
 
   const handleStratColumnChange = (stratCol) => {
     setSelectedStratColumn(stratCol);
-    createPopulationFromColumn(fileData, selectedColumn, stratCol);
+    createPopulationFromColumn(fileData, selectedColumn, stratCol, selectedClusterColumn || null);
   };
 
   // --------------------------------------------------------
@@ -373,18 +463,31 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
       });
 
     const sampled = [];
+    const summary = [];
+
     quotas.forEach((q) => {
       const group = groups[q.k];
       const nh = Math.min(q.base, group.length);
       const shuffled = shuffleCopy(group);
+
       sampled.push(
         ...shuffled.slice(0, nh).map((item) => ({
           ...item,
-          samplingInfo: `Estrato: ${q.k} (${nh}/${group.length})`
+          samplingInfo: `Estrato: ${q.k}`
         }))
       );
+
+      summary.push({
+        estrato: q.k,
+        Nh: group.length,
+        Nh_pct: ((group.length / N) * 100).toFixed(1),
+        nh,
+        nh_pct: ((nh / n) * 100).toFixed(1),
+        frac: (nh / group.length).toFixed(2)
+      });
     });
 
+    setStrataSummary(summary);
     return sampled.slice(0, n);
   };
 
@@ -435,15 +538,18 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
       switch (samplingMethod) {
         case 'random':
           newSample = randomSampling();
+          setStrataSummary([]); // Limpiar resumen si no es estratificado
           break;
         case 'stratified':
           newSample = stratifiedSampling();
           break;
         case 'cluster':
           newSample = clusterSampling();
+          setStrataSummary([]); // Limpiar resumen si no es estratificado
           break;
         default:
           newSample = randomSampling();
+          setStrataSummary([]);
       }
       setSample(newSample);
       setIsAnimating(false);
@@ -500,9 +606,46 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   const popStats = useMemo(() => calculateStats(population), [population]);
   const sampleStats = useMemo(() => calculateStats(sample), [sample]);
 
+  const clusterCount = useMemo(() => {
+    const set = new Set(population.map(p => normalizeKey(p.cluster)));
+    return set.size;
+  }, [population]);
+
+  useEffect(() => {
+    if (samplingMethod === 'cluster') {
+      setNumClustersToSelect((prev) => Math.min(prev, Math.max(1, clusterCount)));
+    }
+  }, [clusterCount, samplingMethod]);
+
   const histogramData = useMemo(() => {
     if (population.length === 0) return [];
 
+    // ✅ Para conglomerados: histograma por conglomerado
+    if (samplingMethod === 'cluster') {
+      const clusterGroups = {};
+
+      population.forEach((p) => {
+        const cid = normalizeKey(p.cluster);
+        if (!clusterGroups[cid]) clusterGroups[cid] = { total: 0, sampled: 0 };
+        clusterGroups[cid].total++;
+      });
+
+      sample.forEach((s) => {
+        const cid = normalizeKey(s.cluster);
+        if (clusterGroups[cid]) clusterGroups[cid].sampled++;
+      });
+
+      return Object.keys(clusterGroups)
+        .filter((cid) => !hideUnselectedClusters || clusterGroups[cid].sampled > 0)
+        .sort((a, b) => clusterGroups[b].total - clusterGroups[a].total)
+        .map((cid) => ({
+          rango: cid,
+          Población: clusterGroups[cid].total,
+          Muestra: clusterGroups[cid].sampled,
+        }));
+    }
+
+    // ✅ Para otros métodos: histograma por rangos de valores
     const valuesPop = population.map((p) => p.value);
     const min = Math.min(...valuesPop);
     const max = Math.max(...valuesPop);
@@ -512,8 +655,8 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
         {
           rango: `${min}`,
           Población: population.length,
-          Muestra: sample.length
-        }
+          Muestra: sample.length,
+        },
       ];
     }
 
@@ -541,10 +684,11 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
         return {
           rango: `${start.toFixed(0)}–${end.toFixed(0)}`,
           Población: popHist[i],
-          Muestra: sampleHist[i]
+          Muestra: sampleHist[i],
         };
       });
-  }, [population, sample]);
+  }, [population, sample, samplingMethod, hideUnselectedClusters]);
+
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -701,17 +845,27 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                   if (uploadedFile) removeFile();
                 }}
                 className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${dataSource === 'generated'
-                    ? 'bg-indigo-500 text-white'
-                    : 'bg-white/5 hover:bg-white/10 border border-white/10'
+                  ? 'bg-indigo-500 text-white'
+                  : 'bg-white/5 hover:bg-white/10 border border-white/10'
                   }`}
               >
                 Datos Generados
               </button>
               <button
-                onClick={() => setDataSource('file')}
+                onClick={() => {
+                  setDataSource('file');
+                  // ✅ Resetear estados si no hay archivo cargado
+                  if (!uploadedFile) {
+                    setPopulation([]);
+                    setSample([]);
+                    setPopulationSize(0);
+                    setSelectedClusterIds([]);
+                    setStrataSummary([]);
+                  }
+                }}
                 className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${dataSource === 'file'
-                    ? 'bg-indigo-500 text-white'
-                    : 'bg-white/5 hover:bg-white/10 border border-white/10'
+                  ? 'bg-indigo-500 text-white'
+                  : 'bg-white/5 hover:bg-white/10 border border-white/10'
                   }`}
               >
                 Cargar Archivo
@@ -770,8 +924,8 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer ${isDragging
-                      ? 'border-indigo-500 bg-indigo-500/10'
-                      : 'border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800/50'
+                    ? 'border-indigo-500 bg-indigo-500/10'
+                    : 'border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800/50'
                     }`}
                 >
                   <Upload className="w-12 h-12 text-slate-500 mx-auto mb-4" />
@@ -828,26 +982,43 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                         <div>
                           <h4 className="font-bold text-blue-400 mb-1">Columnas Categóricas Detectadas</h4>
                           <p className="text-xs text-slate-400">
-                            Estas columnas pueden usarse para muestreo estratificado
+                            Estas columnas pueden usarse para muestreo estratificado (2-20 categorías) o conglomerados (2-50 categorías)
                           </p>
                         </div>
                       </div>
 
                       <div className="space-y-3">
-                        {categoricalColumns.map((col, idx) => (
-                          <div key={idx} className="bg-slate-900/50 p-3 rounded-lg border border-blue-500/10">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-bold text-white">{col.name}</span>
-                              <span className="text-xs text-blue-400 bg-blue-500/20 px-2 py-1 rounded">
-                                {col.uniqueCount} categorías
-                              </span>
+                        {categoricalColumns.map((col, idx) => {
+                          const isGoodForStrata = col.uniqueCount >= 2 && col.uniqueCount <= 20;
+                          const isGoodForCluster = col.uniqueCount >= 2 && col.uniqueCount <= 50;
+
+                          return (
+                            <div key={idx} className="bg-slate-900/50 p-3 rounded-lg border border-blue-500/10">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-bold text-white">{col.name}</span>
+                                <div className="flex gap-2">
+                                  <span className="text-xs text-blue-400 bg-blue-500/20 px-2 py-1 rounded">
+                                    {col.uniqueCount} categorías
+                                  </span>
+                                  {isGoodForStrata && (
+                                    <span className="text-xs text-pink-400 bg-pink-500/20 px-2 py-1 rounded">
+                                      ✓ Estratos
+                                    </span>
+                                  )}
+                                  {isGoodForCluster && (
+                                    <span className="text-xs text-purple-400 bg-purple-500/20 px-2 py-1 rounded">
+                                      ✓ Clusters
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-xs text-slate-400">
+                                <span className="font-bold">Ejemplos:</span> {col.sampleValues.map(v => String(v)).join(', ')}
+                                {col.uniqueCount > 5 && '...'}
+                              </div>
                             </div>
-                            <div className="text-xs text-slate-400">
-                              <span className="font-bold">Ejemplos:</span> {col.sampleValues.map(v => String(v)).join(', ')}
-                              {col.uniqueCount > 5 && '...'}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -896,10 +1067,16 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                     <input
                       type="range"
                       min="1"
-                      max={Math.min(10, numClusters)}
+                      max={Math.max(1, clusterCount)}
                       step="1"
                       value={numClustersToSelect}
-                      onChange={(e) => setNumClustersToSelect(Number(e.target.value))}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setNumClustersToSelect(v);
+                        setSample([]);
+                        setSelectedClusterIds([]);
+                      }}
+
                       className="w-full"
                     />
                     <div className="text-center mt-2">
@@ -907,11 +1084,25 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                         {numClustersToSelect}
                       </span>
                       <p className="text-xs text-slate-400 mt-1">
-                        El tamaño final dependerá de los conglomerados elegidos
+                        de {clusterCount} conglomerados disponibles
                       </p>
-                      <div className="mt-2 text-xs text-slate-500 text-center">
-                        En muestreo por conglomerados,{" "}
-                        <span className="text-white font-bold">n no se fija</span>; depende del tamaño de los conglomerados seleccionados.
+
+                      <div className="mt-3 bg-slate-950/40 border border-purple-500/20 rounded-xl px-3 py-2">
+                        <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-purple-300">
+                          <span className="px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/25">
+                            ✓ Grupos completos
+                          </span>
+                          <span className="text-slate-400">
+                            Seleccionas {numClustersToSelect} de {clusterCount} {clusterCount === 1 ? "conglomerado" : "conglomerados"}
+                          </span>
+                        </div>
+
+                        <div className="mt-1 text-[11px] text-slate-400 text-center leading-snug">
+                          {selectedClusterColumn
+                            ? <>Base: <span className="text-white font-bold">{selectedClusterColumn}</span>. La muestra final depende del tamaño de cada conglomerado.</>
+                            : <>Sin columna: agrupación automática. La muestra final depende del tamaño de cada conglomerado.</>
+                          }
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -947,6 +1138,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                       setSamplingMethod(e.target.value);
                       setSample([]);
                       setSelectedClusterIds([]);
+                      setStrataSummary([]);
                     }}
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
@@ -975,12 +1167,44 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                       onChange={(e) => handleStratColumnChange(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                     >
-                      {categoricalColumns.map((col) => (
-                        <option key={col.name} value={col.name}>
-                          {col.name} ({col.uniqueCount} grupos)
+                      {categoricalColumns
+                        .filter(c => c.uniqueCount >= 2 && c.uniqueCount <= 20)
+                        .map((col) => (
+                          <option key={col.name} value={col.name}>
+                            {col.name} ({col.uniqueCount} grupos)
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
+                {samplingMethod === 'cluster' && dataSource === 'file' && clusterColumns.length > 0 && (
+                  <div>
+                    <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                      Columna para Conglomerados
+                    </label>
+                    <select
+                      value={selectedClusterColumn}
+                      onChange={(e) => {
+                        const col = e.target.value;
+                        setSelectedClusterColumn(col);
+                        createPopulationFromColumn(fileData, selectedColumn, selectedStratColumn || null, col || null);
+                        setStrataSummary([]);
+                        setSelectedClusterIds([]);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    >
+                      <option value="">(Sin columna: usar agrupación automática)</option>
+                      {clusterColumns.map((c) => (
+                        <option key={c.name} value={c.name}>
+                          {c.name} ({c.uniqueCount} conglomerados)
                         </option>
                       ))}
                     </select>
+
+                    <p className="mt-2 text-xs text-slate-400">
+                      Los conglomerados serán los grupos definidos por <span className="text-white font-bold">{selectedClusterColumn || "agrupación automática"}</span>.
+                    </p>
                   </div>
                 )}
 
@@ -1055,14 +1279,72 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                     </div>
                   </div>
                 )}
+
+                {/* 🔥 RESUMEN DE ESTRATOS (solo para estratificado) */}
+                {samplingMethod === 'stratified' && strataSummary.length > 0 && (
+                  <div className="bg-slate-800/40 border border-slate-600/40 rounded-xl p-4">
+                    <h4 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-pink-400" />
+                      Resumen por Estrato
+                    </h4>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-slate-300">
+                        <thead>
+                          <tr className="text-slate-400 border-b border-slate-700">
+                            <th className="px-3 py-2 text-left font-bold">Estrato</th>
+                            <th className="px-3 py-2 text-right font-bold">Población (Nₕ)</th>
+                            <th className="px-3 py-2 text-right font-bold">% Población</th>
+                            <th className="px-3 py-2 text-right font-bold">Muestra (nₕ)</th>
+                            <th className="px-3 py-2 text-right font-bold">% Muestra</th>
+                            <th className="px-3 py-2 text-right font-bold">nₕ / Nₕ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-700/50">
+                          {strataSummary.map((s) => (
+                            <tr key={s.estrato} className="hover:bg-slate-700/20">
+                              <td className="px-3 py-2 font-semibold text-white">{s.estrato}</td>
+                              <td className="px-3 py-2 text-right">{s.Nh}</td>
+                              <td className="px-3 py-2 text-right text-slate-400">{s.Nh_pct}%</td>
+                              <td className="px-3 py-2 text-right font-bold text-pink-300">{s.nh}</td>
+                              <td className="px-3 py-2 text-right text-pink-400">{s.nh_pct}%</td>
+                              <td className="px-3 py-2 text-right font-mono text-indigo-300">{s.frac}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
+                      En estratificado proporcional, la fracción <strong className="text-white">nₕ/Nₕ</strong> es similar en todos los estratos,
+                      garantizando que cada grupo contribuya proporcionalmente a su tamaño en la población.
+                    </p>
+                  </div>
+                )}
+
                 {/* TABLA DE MUESTRA */}
                 <div className="glass rounded-3xl p-8">
                   <div className="flex items-center justify-between mb-6">
                     <div>
                       <h3 className="text-xl font-black text-white flex items-center gap-2">
                         <TableIcon className="w-6 h-6 text-indigo-400" />
-                        Muestra Obtenida ({sample.length} elementos)
+                        {samplingMethod === 'stratified'
+                          ? `Muestra Obtenida – Muestreo Estratificado Proporcional (n = ${sample.length})`
+                          : `Muestra Obtenida (${sample.length} elementos)`
+                        }
                       </h3>
+
+                      {dataSource === 'file' && (
+                        <div className="mt-2 text-xs text-slate-400 space-y-1">
+                          {samplingMethod === 'stratified' && selectedStratColumn && (
+                            <div>Estratos basados en: <span className="text-white font-bold">{selectedStratColumn}</span></div>
+                          )}
+                          {samplingMethod === 'cluster' && selectedClusterColumn && (
+                            <div>Conglomerados basados en: <span className="text-white font-bold">{selectedClusterColumn}</span></div>
+                          )}
+                        </div>
+                      )}
+
                       {samplingMethod === 'cluster' && (
                         <div className="mt-2 text-xs text-slate-400 space-y-1">
                           <div>
@@ -1097,12 +1379,16 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                           <tr>
                             <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">ID</th>
                             <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">{selectedColumnLabel}</th>
-                            <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">
-                              Estrato
-                            </th>
-                            <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">
-                              Conglomerado
-                            </th>
+                            {samplingMethod === 'stratified' && (
+                              <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">
+                                Estrato
+                              </th>
+                            )}
+                            {samplingMethod === 'cluster' && (
+                              <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">
+                                Conglomerado
+                              </th>
+                            )}
                             <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">Información de Muestreo</th>
                           </tr>
                         </thead>
@@ -1117,17 +1403,18 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                                   ? `$${item.value.toLocaleString()}`
                                   : item.value}
                               </td>
-                              {/* ✅ ESTRATO */}
-                              <td className="px-4 py-3 text-xs font-bold text-slate-300">
-                                {item.stratGroup ?? "—"}
-                              </td>
-                              {/* ✅ CONGLOMERADO */}
-                              <td className={`px-4 py-3 text-xs font-bold ${samplingMethod === 'cluster'
-                                  ? 'text-purple-300'
-                                  : 'text-slate-400'
-                                }`}>
-                                {item.cluster ?? "—"}
-                              </td>
+                              {/* ✅ ESTRATO - Solo visible en estratificado */}
+                              {samplingMethod === 'stratified' && (
+                                <td className="px-4 py-3 text-xs font-bold text-pink-300">
+                                  {item.stratGroup ?? "—"}
+                                </td>
+                              )}
+                              {/* ✅ CONGLOMERADO - Solo visible en cluster */}
+                              {samplingMethod === 'cluster' && (
+                                <td className="px-4 py-3 text-xs font-bold text-purple-300">
+                                  {item.cluster ?? "—"}
+                                </td>
+                              )}
                               <td className="px-4 py-3 text-xs text-slate-400">{item.samplingInfo}</td>
                             </tr>
                           ))}
@@ -1173,7 +1460,10 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
 
                       <div>
                         <h4 className="text-lg font-black text-white mb-4">
-                          Distribución de {selectedColumnLabel}: Población vs Muestra
+                          {samplingMethod === 'cluster'
+                            ? 'Distribución por Conglomerado: Población vs Muestra'
+                            : `Distribución de ${selectedColumnLabel}: Población vs Muestra`
+                          }
                         </h4>
                         <ResponsiveContainer width="100%" height={300}>
                           <BarChart data={histogramData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
@@ -1184,13 +1474,18 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                               tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
                               axisLine={false}
                               tickLine={false}
+                              height={samplingMethod === "cluster" ? 80 : 50}
+                              interval={0}
+                              angle={samplingMethod === "cluster" ? -35 : 0}
+                              textAnchor={samplingMethod === "cluster" ? "end" : "middle"}
                               label={{
-                                value: selectedColumnLabel,
+                                value: samplingMethod === 'cluster' ? 'Conglomerado' : selectedColumnLabel,
                                 position: 'insideBottom',
-                                offset: -40,
+                                offset: samplingMethod === "cluster" ? -55 : -40,
                                 style: { fill: '#94a3b8', fontWeight: 700, fontSize: 12 }
                               }}
                             />
+
                             <YAxis
                               stroke="#94a3b8"
                               tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
@@ -1249,20 +1544,27 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                               <h4 className="font-bold text-pink-400 mb-4">Muestra</h4>
                             </div>
 
-                            {[
-                              { label: "Media (x̄)", value: sampleStats.mean, diff: Math.abs(popStats.mean - sampleStats.mean).toFixed(2) },
-                              { label: "Mediana", value: sampleStats.median, diff: Math.abs(popStats.median - sampleStats.median).toFixed(2) },
-                            ].map((stat, i) => (
-                              <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-pink-500/20">
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="text-xs text-slate-500 uppercase font-bold">{stat.label}</div>
-                                  <div className="text-xs text-slate-500">Δ: {dataSource === 'generated' ? `$${parseFloat(stat.diff).toLocaleString()}` : stat.diff}</div>
+                            {(() => {
+                              const popMean = parseFloat(popStats.mean);
+                              const sampleMean = parseFloat(sampleStats.mean);
+                              const popMedian = parseFloat(popStats.median);
+                              const sampleMedian = parseFloat(sampleStats.median);
+
+                              return [
+                                { label: "Media (x̄)", value: sampleStats.mean, diff: Math.abs(popMean - sampleMean).toFixed(2) },
+                                { label: "Mediana", value: sampleStats.median, diff: Math.abs(popMedian - sampleMedian).toFixed(2) },
+                              ].map((stat, i) => (
+                                <div key={i} className="bg-slate-950/50 p-4 rounded-xl border border-pink-500/20">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="text-xs text-slate-500 uppercase font-bold">{stat.label}</div>
+                                    <div className="text-xs text-slate-500">Δ: {dataSource === 'generated' ? `$${parseFloat(stat.diff).toLocaleString()}` : stat.diff}</div>
+                                  </div>
+                                  <div className={`text-3xl font-black bg-gradient-to-r ${i === 0 ? 'from-blue-500 to-cyan-500' : 'from-indigo-500 to-purple-500'} bg-clip-text text-transparent`}>
+                                    {dataSource === 'generated' ? `$${parseFloat(stat.value).toLocaleString()}` : stat.value}
+                                  </div>
                                 </div>
-                                <div className={`text-3xl font-black bg-gradient-to-r ${i === 0 ? 'from-blue-500 to-cyan-500' : 'from-indigo-500 to-purple-500'} bg-clip-text text-transparent`}>
-                                  {dataSource === 'generated' ? `$${parseFloat(stat.value).toLocaleString()}` : stat.value}
-                                </div>
-                              </div>
-                            ))}
+                              ));
+                            })()}
                           </div>
                         </div>
                       )}
@@ -1345,13 +1647,14 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
 
       </main>
 
-      <style jsx>{`
-        .glass {
-          background: rgba(15, 23, 42, 0.6);
-          backdrop-filter: blur(20px);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-        }
+      <style>{`
+      .glass {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            }
       `}</style>
+
     </div>
   );
 };
