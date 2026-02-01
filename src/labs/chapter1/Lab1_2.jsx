@@ -14,7 +14,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   const [sample, setSample] = useState([]);
   const [samplingMethod, setSamplingMethod] = useState('random');
   const [isAnimating, setIsAnimating] = useState(false);
-  const [dataSource, setDataSource] = useState('generated');
+  const [dataSource, setDataSource] = useState(null); // <- antes 'generated'
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileData, setFileData] = useState([]);
   const [selectedColumn, setSelectedColumn] = useState('');
@@ -36,11 +36,10 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   const [analysisResults, setAnalysisResults] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(true);
   const [analyzedColumn, setAnalyzedColumn] = useState("");
-
-  // ============================================================================
-  // ✅ NUEVO ESTADO PARA PESTAÑAS
-  // ============================================================================
   const [activeTab, setActiveTab] = useState('muestreo');
+  // NEW: track phase within Muestreo tab
+  // null = no source chosen yet, 'generated'|'file' = source chosen
+  const [sourceChosen, setSourceChosen] = useState(null);
 
   // ============================================================================
   // UTILIDADES
@@ -109,15 +108,16 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   // GENERACIÓN DE POBLACIÓN
   // ============================================================================
   useEffect(() => {
-    if (dataSource === 'generated') {
-      generatePopulation();
-      setAvailableMethods(['random', 'stratified', 'cluster']);
-      setSelectedStratColumn('stratGroup');
-      setSelectedColumnLabel('Salario mensual (MXN)');
-      setSelectedClusterIds([]);
-      setStrataSummary([]);
-    }
-  }, [dataSource, numClusters]);
+    if (sourceChosen !== 'generated') return;
+
+    generatePopulation();
+    setAvailableMethods(['random', 'stratified', 'cluster']);
+    setSelectedStratColumn('stratGroup');
+    setSelectedColumnLabel('Salario mensual (MXN)');
+    setSelectedClusterIds([]);
+    setStrataSummary([]);
+  }, [sourceChosen, numClusters]);
+
 
   const generatePopulation = () => {
     const pop = [];
@@ -348,6 +348,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     if (file) {
       setUploadedFile(file);
       setDataSource('file');
+      setSourceChosen('file');
       processFile(file);
     }
   };
@@ -362,6 +363,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
       if (['csv', 'xlsx', 'xls'].includes(extension)) {
         setUploadedFile(file);
         setDataSource('file');
+        setSourceChosen('file');
         processFile(file);
       } else {
         alert('Por favor sube un archivo CSV o Excel (.xlsx, .xls)');
@@ -388,7 +390,33 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
     setSelectedStratColumn('');
     setAvailableMethods(['random', 'cluster']);
     setDataSource('generated');
+    setSourceChosen(null);
     generatePopulation();
+  };
+  const resetToNoSource = () => {
+    // Fuente
+    setSourceChosen(null);
+    setDataSource(null);
+    setUploadedFile(null);
+
+    // Datos
+    setPopulation([]);
+    setPopulationSize(0);
+
+    // Muestra / método
+    setSample([]);
+    setSamplingMethod("random"); // o el default que uses
+    setSampleSize(100);          // o el default
+    setSelectedClusterIds([]);
+
+    // Análisis (si tienes estos estados)
+    setAnalysisResults(null);    // o {}
+    setStrataSummary([]);
+    setPopStats(null);
+    setSampleStats(null);
+
+    // (Opcional) devolver al tab muestreo para evitar confusión
+    setActiveTab("muestreo");
   };
 
   const handleColumnChange = (column) => {
@@ -655,22 +683,13 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
 
     const method = analysisResults.recommendation.method;
 
-    // 1. Cambiar el método de muestreo
     setSamplingMethod(method);
-
-    // 2. Limpiar estados previos
     setSample([]);
     setSelectedClusterIds([]);
     setStrataSummary([]);
 
-    // 3. Configurar según el método recomendado
     if (method === 'stratified') {
-      // Para estratificado: asegurar que hay columna de estratos seleccionada
-      if (selectedStratColumn) {
-        // Ya está configurado, solo notificar
-        console.log('✓ Estratificado configurado con:', selectedStratColumn);
-      } else if (categoricalColumns.length > 0) {
-        // Seleccionar la mejor columna automáticamente
+      if (!selectedStratColumn && categoricalColumns.length > 0) {
         const bestStrata = pickBestStrataColumn(categoricalColumns);
         if (bestStrata && dataSource === 'file') {
           setSelectedStratColumn(bestStrata);
@@ -678,14 +697,10 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
         }
       }
     } else if (method === 'cluster') {
-      // Para conglomerados: configurar columna y ajustar número
       if (clusterCount > 0) {
-        // Sugerir seleccionar ~10% de los conglomerados (mínimo 2, máximo 10)
         const suggested = Math.max(2, Math.min(10, Math.ceil(clusterCount * 0.1)));
         setNumClustersToSelect(suggested);
       }
-
-      // Si hay columnas de cluster disponibles y no hay una seleccionada
       if (dataSource === 'file' && !selectedClusterColumn && clusterColumns.length > 0) {
         const bestCluster = pickBestClusterColumn(categoricalColumns);
         if (bestCluster) {
@@ -693,12 +708,8 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
           createPopulationFromColumn(fileData, selectedColumn, selectedStratColumn || null, bestCluster);
         }
       }
-    } else if (method === 'random') {
-      // Para MAS: no necesita configuración adicional
-      console.log('✓ Muestreo Aleatorio Simple configurado');
     }
 
-    // 4. Cambiar automáticamente a la pestaña "Muestreo"
     setActiveTab('muestreo');
   };
 
@@ -981,9 +992,50 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   }, [clusterCount, samplingMethod]);
 
   // ============================================================================
-  // COMPONENTE AnalysisSection
+  // COMPONENTE AnalysisSection — estado vacío hasta elegir fuente + datos listos
   // ============================================================================
   const AnalysisSection = () => {
+    // 1) AÚN NO ELIGE FUENTE
+    if (sourceChosen === null) {
+      return (
+        <div className="glass rounded-3xl p-12 text-center">
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-purple-500/20 rounded-full blur-2xl" />
+            <div className="relative w-32 h-32 bg-white/5 rounded-full flex items-center justify-center border border-white/10 mx-auto">
+              <BarChart3 className="w-16 h-16 text-slate-700" />
+            </div>
+          </div>
+          <h3 className="text-2xl font-black text-white mb-2">Aún no hay análisis disponible</h3>
+          <p className="text-slate-400 max-w-md mx-auto">
+            Primero selecciona una fuente en <strong className="text-slate-200">Muestreo</strong>:{" "}
+            <strong className="text-slate-200">Datos generados</strong> o{" "}
+            <strong className="text-slate-200">Cargar archivo</strong>.
+          </p>
+        </div>
+      );
+    }
+
+    // 2) YA ELIGIÓ FUENTE, PERO AÚN NO HAY DATOS (ej. archivo no cargado)
+    if (population.length === 0) {
+      return (
+        <div className="glass rounded-3xl p-12 text-center">
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-purple-500/20 rounded-full blur-2xl" />
+            <div className="relative w-32 h-32 bg-white/5 rounded-full flex items-center justify-center border border-white/10 mx-auto">
+              <BarChart3 className="w-16 h-16 text-slate-700" />
+            </div>
+          </div>
+          <h3 className="text-2xl font-black text-white mb-2">Esperando datos…</h3>
+          <p className="text-slate-400 max-w-md mx-auto">
+            {sourceChosen === "file"
+              ? "Carga tu archivo para calcular la recomendación automática."
+              : "Genera la población de ejemplo para calcular la recomendación automática."}
+          </p>
+        </div>
+      );
+    }
+
+    // 3) YA HAY DATOS, PERO AÚN NO HAY RESULTADOS (por si tu análisis tarda/depende de useEffect)
     if (!analysisResults) return null;
 
     const {
@@ -995,239 +1047,256 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
       totalN,
       groupAnalysis,
       varianceExplained,
-      totalGroups
+      totalGroups,
     } = analysisResults;
 
     const getMethodIcon = (method) => {
       switch (method) {
-        case "stratified": return "📊";
-        case "cluster": return "🗂️";
-        case "random": return "🎲";
-        default: return "📈";
+        case "stratified":
+          return "📊";
+        case "cluster":
+          return "🗂️";
+        case "random":
+          return "🎲";
+        default:
+          return "📈";
       }
     };
 
     const getMethodName = (method) => {
       switch (method) {
-        case "stratified": return "Muestreo Estratificado";
-        case "cluster": return "Muestreo por Conglomerados";
-        case "random": return "Muestreo Aleatorio Simple";
-        default: return method;
+        case "stratified":
+          return "Muestreo Estratificado";
+        case "cluster":
+          return "Muestreo por Conglomerados";
+        case "random":
+          return "Muestreo Aleatorio Simple";
+        default:
+          return method;
       }
     };
 
     const getConfidenceColor = (confidence) => {
       switch (confidence) {
-        case "high": return "text-green-400 bg-green-500/10 border-green-500/20";
-        case "medium": return "text-yellow-400 bg-yellow-500/10 border-yellow-500/20";
-        case "low": return "text-orange-400 bg-orange-500/10 border-orange-500/20";
-        default: return "text-blue-400 bg-blue-500/10 border-blue-500/20";
+        case "high":
+          return "text-green-400 bg-green-500/10 border-green-500/20";
+        case "medium":
+          return "text-yellow-400 bg-yellow-500/10 border-yellow-500/20";
+        case "low":
+          return "text-orange-400 bg-orange-500/10 border-orange-500/20";
+        default:
+          return "text-blue-400 bg-blue-500/10 border-blue-500/20";
       }
     };
 
     return (
-      <div className="glass rounded-3xl overflow-hidden border border-purple-500/20 mb-6">
-        <button
-          onClick={() => setShowAnalysis(!showAnalysis)}
-          className="w-full flex items-center justify-between p-6 hover:bg-white/5 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <BarChart3 className="w-5 h-5 text-purple-400" />
-            <h3 className="text-lg font-black text-white">Análisis y Recomendación Automática</h3>
+      <div className="space-y-6">
+        {/* Badge: resultados basados en población (NO muestra) */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-purple-400 bg-purple-500/10 border border-purple-500/20 px-3 py-1 rounded-full flex items-center gap-1">
+            📊 Resultados basados en la población actual (N = {population.length})
+          </span>
+        </div>
 
-            {recommendation && (
-              <span className={`text-xs font-bold px-3 py-1 rounded-full ${getConfidenceColor(recommendation.confidence)}`}>
-                {getMethodIcon(recommendation.method)} {getMethodName(recommendation.method)}
-              </span>
-            )}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-600/40">
+            <h4 className="text-sm font-bold text-slate-200 mb-3">📊 Variable Numérica</h4>
 
-          {showAnalysis ? (
-            <ChevronUp className="w-5 h-5 text-slate-400" />
-          ) : (
-            <ChevronDown className="w-5 h-5 text-slate-400" />
-          )}
-        </button>
-
-        {showAnalysis && (
-          <div className="px-6 pb-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-600/40">
-                <h4 className="text-sm font-bold text-slate-200 mb-3">📊 Variable Numérica</h4>
-
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 text-xs">Variable:</span>
-                    <span className="text-white font-bold">{analyzedColumn}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 text-xs">N:</span>
-                    <span className="text-white font-bold">{totalN}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 text-xs">Media:</span>
-                    <span className="text-white font-bold">{mean.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 text-xs">Desv. Est.:</span>
-                    <span className="text-white font-bold">{stdDev.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400 text-xs">Varianza:</span>
-                    <span className="text-white font-bold">{variance.toFixed(2)}</span>
-                  </div>
-
-                  <div className="border-t border-slate-700 pt-3 mt-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-400 text-xs">Coef. Variación (CV):</span>
-                      <span className="text-indigo-400 text-lg font-black">{cv.toFixed(1)}%</span>
-                    </div>
-
-                    <div className={`mt-2 text-xs px-3 py-2 rounded-lg ${cv < 15
-                      ? "bg-green-500/10 border border-green-500/20 text-green-400"
-                      : cv < 30
-                        ? "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
-                        : "bg-orange-500/10 border border-orange-500/20 text-orange-400"
-                      }`}>
-                      {cv < 15
-                        ? "✓ Población HOMOGÉNEA (baja variabilidad)"
-                        : cv < 30
-                          ? "⚠️ Población MODERADAMENTE HETEROGÉNEA"
-                          : "⚠️ Población HETEROGÉNEA (alta variabilidad)"}
-                    </div>
-                  </div>
-                </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-400 text-xs">Variable:</span>
+                <span className="text-white font-bold">{analyzedColumn}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 text-xs">N:</span>
+                <span className="text-white font-bold">{totalN}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 text-xs">Media:</span>
+                <span className="text-white font-bold">{mean.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 text-xs">Desv. Est.:</span>
+                <span className="text-white font-bold">{stdDev.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 text-xs">Varianza:</span>
+                <span className="text-white font-bold">{variance.toFixed(2)}</span>
               </div>
 
-              {selectedStratColumn && groupAnalysis && groupAnalysis.length > 0 && (
-                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-600/40">
-                  <h4 className="text-sm font-bold text-slate-200 mb-3">🗂️ Análisis de Agrupaciones</h4>
-
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400 text-xs">Columna:</span>
-                      <span className="text-white font-bold">{selectedStratColumn}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400 text-xs"># grupos:</span>
-                      <span className="text-white font-bold">{totalGroups}</span>
-                    </div>
-
-                    {typeof varianceExplained === "number" && (
-                      <div className="border-t border-slate-700 pt-3 mt-3">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-slate-400 text-xs">Varianza Explicada:</span>
-                          <span className="text-pink-400 text-lg font-black">{varianceExplained.toFixed(1)}%</span>
-                        </div>
-
-                        <div className="w-full bg-slate-700/50 rounded-full h-3 overflow-hidden mb-2">
-                          <div
-                            className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full transition-all duration-500"
-                            style={{ width: `${Math.min(Math.max(varianceExplained, 0), 100)}%` }}
-                          />
-                        </div>
-
-                        <div className={`text-xs px-3 py-2 rounded-lg ${varianceExplained > 40
-                          ? "bg-green-500/10 border border-green-500/20 text-green-400"
-                          : varianceExplained < 10
-                            ? "bg-blue-500/10 border border-blue-500/20 text-blue-400"
-                            : "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
-                          }`}>
-                          {varianceExplained > 40
-                            ? "✓ Alta diferencia entre grupos (ideal para ESTRATIFICADO)"
-                            : varianceExplained < 10
-                              ? "✓ Grupos parecidos a la población (ideal para CONGLOMERADOS)"
-                              : "⚠️ Diferencias moderadas entre grupos (MAS recomendado)"}
-                        </div>
-
-                        <div className="mt-3 max-h-40 overflow-y-auto">
-                          <table className="w-full text-xs">
-                            <thead className="sticky top-0 bg-slate-900">
-                              <tr className="text-slate-500">
-                                <th className="text-left py-1">Grupo</th>
-                                <th className="text-right py-1">n</th>
-                                <th className="text-right py-1">CV%</th>
-                              </tr>
-                            </thead>
-                            <tbody className="text-slate-300">
-                              {groupAnalysis
-                                .filter(g => g.valid)
-                                .sort((a, b) => b.size - a.size)
-                                .slice(0, 12)
-                                .map((g, idx) => (
-                                  <tr key={idx} className="border-t border-slate-800">
-                                    <td className="py-1 text-white font-semibold">{g.name}</td>
-                                    <td className="text-right py-1">{g.size}</td>
-                                    <td className={`text-right py-1 font-mono ${g.cv < 20 ? "text-green-400" : g.cv < 30 ? "text-yellow-400" : "text-orange-400"
-                                      }`}>
-                                      {g.cv.toFixed(1)}%
-                                    </td>
-                                  </tr>
-                                ))}
-                            </tbody>
-                          </table>
-                          <div className="text-[11px] text-slate-500 mt-2">
-                            Regla: &gt;40% Estratificado | &lt;10% Conglomerados | 10–40% MAS
-                          </div>
-                        </div>
-
-                      </div>
-                    )}
-                  </div>
+              <div className="border-t border-slate-700 pt-3 mt-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 text-xs">Coef. Variación (CV):</span>
+                  <span className="text-indigo-400 text-lg font-black">{cv.toFixed(1)}%</span>
                 </div>
-              )}
+
+                <div
+                  className={`mt-2 text-xs px-3 py-2 rounded-lg ${cv < 15
+                    ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                    : cv < 30
+                      ? "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
+                      : "bg-orange-500/10 border border-orange-500/20 text-orange-400"
+                    }`}
+                >
+                  {cv < 15
+                    ? "✓ Población HOMOGÉNEA (baja variabilidad)"
+                    : cv < 30
+                      ? "⚠️ Población MODERADAMENTE HETEROGÉNEA"
+                      : "⚠️ Población HETEROGÉNEA (alta variabilidad)"}
+                </div>
+              </div>
             </div>
+          </div>
 
-            {recommendation && (
-              <div className={`border rounded-xl p-5 ${recommendation.confidence === "high"
-                ? "bg-indigo-500/10 border-indigo-500/30"
-                : recommendation.confidence === "medium"
-                  ? "bg-yellow-500/10 border-yellow-500/30"
-                  : "bg-orange-500/10 border-orange-500/30"
-                }`}>
-                <div className="flex items-start gap-4">
-                  <div className="text-4xl">{getMethodIcon(recommendation.method)}</div>
+          {selectedStratColumn && groupAnalysis && groupAnalysis.length > 0 && (
+            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-600/40">
+              <h4 className="text-sm font-bold text-slate-200 mb-3">🗂️ Análisis de Agrupaciones</h4>
 
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h4 className="text-lg font-black text-white">Recomendación</h4>
-                      <span className={`text-xs font-bold px-3 py-1 rounded-full ${getConfidenceColor(recommendation.confidence)}`}>
-                        Confianza: {recommendation.confidence === "high" ? "Alta" : recommendation.confidence === "medium" ? "Media" : "Baja"}
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-400 text-xs">Columna:</span>
+                  <span className="text-white font-bold">{selectedStratColumn}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 text-xs"># grupos:</span>
+                  <span className="text-white font-bold">{totalGroups}</span>
+                </div>
+
+                {typeof varianceExplained === "number" && (
+                  <div className="border-t border-slate-700 pt-3 mt-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-slate-400 text-xs">Varianza Explicada:</span>
+                      <span className="text-pink-400 text-lg font-black">
+                        {varianceExplained.toFixed(1)}%
                       </span>
                     </div>
 
-                    <div className="text-2xl font-black mb-2 bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                      {getMethodName(recommendation.method)}
+                    <div className="w-full bg-slate-700/50 rounded-full h-3 overflow-hidden mb-2">
+                      <div
+                        className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.min(Math.max(varianceExplained, 0), 100)}%`,
+                        }}
+                      />
                     </div>
 
-                    <p className="text-sm text-slate-300 mb-1">
-                      <span className="text-white font-bold">Razón:</span> {recommendation.reason}
-                    </p>
-                    <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                      {recommendation.details}
-                    </p>
-
-                    {recommendation.warning && (
-                      <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4">
-                        <div className="flex items-center gap-2 text-red-400 text-xs font-bold">
-                          <AlertCircle className="w-4 h-4" />
-                          ADVERTENCIA
-                        </div>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={applyRecommendation}
-                      className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-bold text-sm hover:scale-105 transition-transform flex items-center gap-2"
+                    <div
+                      className={`text-xs px-3 py-2 rounded-lg ${varianceExplained > 40
+                        ? "bg-green-500/10 border border-green-500/20 text-green-400"
+                        : varianceExplained < 10
+                          ? "bg-blue-500/10 border border-blue-500/20 text-blue-400"
+                          : "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
+                        }`}
                     >
-                      <Shuffle className="w-4 h-4" />
-                      Aplicar recomendación
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+                      {varianceExplained > 40
+                        ? "✓ Alta diferencia entre grupos (ideal para ESTRATIFICADO)"
+                        : varianceExplained < 10
+                          ? "✓ Grupos parecidos a la población (ideal para CONGLOMERADOS)"
+                          : "⚠️ Diferencias moderadas entre grupos (MAS recomendado)"}
+                    </div>
 
+                    <div className="mt-3 max-h-40 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-slate-900">
+                          <tr className="text-slate-500">
+                            <th className="text-left py-1">Grupo</th>
+                            <th className="text-right py-1">n</th>
+                            <th className="text-right py-1">CV%</th>
+                          </tr>
+                        </thead>
+                        <tbody className="text-slate-300">
+                          {groupAnalysis
+                            .filter((g) => g.valid)
+                            .sort((a, b) => b.size - a.size)
+                            .slice(0, 12)
+                            .map((g, idx) => (
+                              <tr key={idx} className="border-t border-slate-800">
+                                <td className="py-1 text-white font-semibold">{g.name}</td>
+                                <td className="text-right py-1">{g.size}</td>
+                                <td
+                                  className={`text-right py-1 font-mono ${g.cv < 20
+                                    ? "text-green-400"
+                                    : g.cv < 30
+                                      ? "text-yellow-400"
+                                      : "text-orange-400"
+                                    }`}
+                                >
+                                  {g.cv.toFixed(1)}%
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+
+                      <div className="text-[11px] text-slate-500 mt-2">
+                        Regla: &gt;40% Estratificado | &lt;10% Conglomerados | 10–40% MAS
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {recommendation && (
+          <div
+            className={`border rounded-xl p-5 ${recommendation.confidence === "high"
+              ? "bg-indigo-500/10 border-indigo-500/30"
+              : recommendation.confidence === "medium"
+                ? "bg-yellow-500/10 border-yellow-500/30"
+                : "bg-orange-500/10 border-orange-500/30"
+              }`}
+          >
+            <div className="flex items-start gap-4">
+              <div className="text-4xl">{getMethodIcon(recommendation.method)}</div>
+
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-2">
+                  <h4 className="text-lg font-black text-white">Recomendación</h4>
+                  <span
+                    className={`text-xs font-bold px-3 py-1 rounded-full border ${getConfidenceColor(
+                      recommendation.confidence
+                    )}`}
+                  >
+                    Confianza:{" "}
+                    {recommendation.confidence === "high"
+                      ? "Alta"
+                      : recommendation.confidence === "medium"
+                        ? "Media"
+                        : "Baja"}
+                  </span>
+                </div>
+
+                <div className="text-2xl font-black mb-2 bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+                  {getMethodName(recommendation.method)}
+                </div>
+
+                <p className="text-sm text-slate-300 mb-1">
+                  <span className="text-white font-bold">Razón:</span> {recommendation.reason}
+                </p>
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                  {recommendation.details}
+                </p>
+
+                {recommendation.warning && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4">
+                    <div className="flex items-center gap-2 text-red-400 text-xs font-bold">
+                      <AlertCircle className="w-4 h-4" />
+                      ADVERTENCIA
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={applyRecommendation}
+                  className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-bold text-sm hover:scale-105 transition-transform flex items-center gap-2"
+                >
+                  <Shuffle className="w-4 h-4" />
+                  Aplicar recomendación
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1235,10 +1304,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   };
 
   // ============================================================================
-  // CONTINÚA EN LA PARTE 2 (EL RETURN CON LAS PESTAÑAS)
-  // ============================================================================
-  // ============================================================================
-  // ✅ RETURN JSX - RENDERIZADO PRINCIPAL CON PESTAÑAS
+  // ✅ RETURN JSX
   // ============================================================================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -1248,6 +1314,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '4s' }}></div>
       </div>
 
+      {/* NAV */}
       <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -1288,6 +1355,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
 
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-8 relative">
 
+        {/* HEADER del lab */}
         <section className="glass rounded-3xl p-8 border-l-4 border-l-indigo-500 relative overflow-hidden group hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-500">
           <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
             <Users className="w-32 h-32" />
@@ -1316,7 +1384,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
           </div>
         </section>
 
-        {/* Guía colapsable */}
+        {/* GUÍA colapsable */}
         <div className="glass rounded-3xl overflow-hidden border border-blue-500/20">
           <button
             onClick={() => setShowGuide(!showGuide)}
@@ -1381,10 +1449,12 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
           )}
         </div>
 
-        {/* ============================================================================ */}
-        {/* ✅ BARRA DE PESTAÑAS (TABS) */}
-        {/* ============================================================================ */}
+        {/* ============================================ */}
+        {/* CONTENEDOR PRINCIPAL CON PESTAÑAS            */}
+        {/* ============================================ */}
         <div className="glass rounded-3xl overflow-hidden border border-indigo-500/20">
+
+          {/* BARRA DE PESTAÑAS */}
           <div className="flex border-b border-white/10">
             <button
               onClick={() => setActiveTab('muestreo')}
@@ -1398,7 +1468,7 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
             </button>
             <button
               onClick={() => setActiveTab('analisis')}
-              className={`flex-1 px-6 py-4 font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'analisis'
+              className={`flex-1 px-6 py-4 font-bold text-sm transition-all${activeTab === 'analisis'
                 ? 'bg-purple-500/20 text-purple-400 border-b-2 border-purple-500'
                 : 'text-slate-400 hover:bg-white/5'
                 }`}
@@ -1406,47 +1476,61 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
               <BarChart3 className="w-4 h-4" />
               Análisis
             </button>
+
             <button
-              onClick={() => setActiveTab('avanzado')}
+              onClick={() => { if (sample.length > 0) setActiveTab('avanzado'); }}
               className={`flex-1 px-6 py-4 font-bold text-sm transition-all flex items-center justify-center gap-2 ${activeTab === 'avanzado'
                 ? 'bg-pink-500/20 text-pink-400 border-b-2 border-pink-500'
-                : 'text-slate-400 hover:bg-white/5'
+                : population.length > 0
+                  ? 'text-slate-400 hover:bg-white/5'
+                  : 'text-slate-600 cursor-not-allowed'
                 }`}
             >
               <TrendingUp className="w-4 h-4" />
               Avanzado
+              {sample.length === 0 && <span className="text-[10px]">🔒</span>}
             </button>
           </div>
 
-          {/* ============================================================================ */}
-          {/* ✅ TAB 1: MUESTREO (Fuente + Config + Tabla) */}
-          {/* ============================================================================ */}
+          {/* ============================================ */}
+          {/* TAB: MUESTREO                               */}
+          {/* ============================================ */}
           {activeTab === 'muestreo' && (
             <div className="p-6 space-y-6">
 
-              {/* FUENTE DE DATOS */}
-              <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-black flex items-center gap-2 text-white">
-                    <FileSpreadsheet className="w-5 h-5 text-indigo-400" />
-                    Fuente de Datos
-                  </h3>
+              {/* FASE A: Elección de fuente (solo cuando no hay fuente elegida) */}
+              {sourceChosen === null && (
+                <div>
+                  {/* Nota aclaratoria */}
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3 mb-6">
+                    <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                    <p className="text-sm text-slate-300">
+                      <strong className="text-blue-400">Paso 1 — Fuente de datos.</strong> Primero selecciona una fuente de datos. Puedes generar una población de ejemplo para aprender muestreo, o cargar tu propio archivo para analizar datos reales.
+                    </p>
+                  </div>
 
-                  <div className="flex gap-2">
+                  {/* Dos tarjetas grandes exclusivas */}
+                  <div className="flex flex-col gap-4">
                     <button
                       onClick={() => {
+                        setSourceChosen('generated');
                         setDataSource('generated');
-                        if (uploadedFile) removeFile();
                       }}
-                      className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${dataSource === 'generated'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-white/5 hover:bg-white/10 border border-white/10'
-                        }`}
+                      className="w-full text-left bg-slate-900/60 hover:bg-indigo-500/10 border border-white/10 hover:border-indigo-500/40 rounded-2xl p-6 transition-all flex items-center gap-5"
                     >
-                      Datos Generados
+                      <div className="w-14 h-14 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                        <Shuffle className="w-7 h-7 text-indigo-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-black text-white mb-1">Generar datos de ejemplo</h4>
+                        <p className="text-sm text-slate-400">Para practicar los métodos de muestreo con una población simulada</p>
+                      </div>
+                      <ChevronDown className="w-5 h-5 text-slate-500 ml-auto rotate-[-90deg]" />
                     </button>
+
                     <button
                       onClick={() => {
+                        setSourceChosen('file');
                         setDataSource('file');
                         if (!uploadedFile) {
                           setPopulation([]);
@@ -1456,608 +1540,585 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                           setStrataSummary([]);
                         }
                       }}
-                      className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${dataSource === 'file'
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-white/5 hover:bg-white/10 border border-white/10'
-                        }`}
+                      className="w-full text-left bg-slate-900/60 hover:bg-yellow-500/10 border border-white/10 hover:border-yellow-500/40 rounded-2xl p-6 transition-all flex items-center gap-5"
                     >
-                      Cargar Archivo
+                      <div className="w-14 h-14 rounded-xl bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center shrink-0">
+                        <Upload className="w-7 h-7 text-yellow-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-black text-white mb-1">Cargar archivo propio</h4>
+                        <p className="text-sm text-slate-400">CSV o Excel con datos reales para analizar</p>
+                      </div>
+                      <ChevronDown className="w-5 h-5 text-slate-500 ml-auto rotate-[-90deg]" />
                     </button>
                   </div>
                 </div>
+              )}
 
-                {dataSource === 'generated' && (
-                  <>
-                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3 mb-6">
-                      <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-                      <div className="text-xs text-slate-300">
-                        <p className="mb-2">
-                          <strong className="text-blue-400">Población simulada:</strong> {numClusters} conglomerados con tamaños variables (40-80 elementos cada uno).
-                        </p>
-                        <p className="text-slate-400">
-                          <strong>Estratos y rangos salariales:</strong>
-                        </p>
-                        <ul className="mt-1 space-y-0.5 text-slate-400">
-                          <li>• Ingeniería (30%): $18,000 - $35,000 MXN</li>
-                          <li>• Marketing (20%): $12,000 - $22,000 MXN</li>
-                          <li>• Soporte (10%): $8,000 - $15,000 MXN</li>
-                          <li>• Ventas (40%): $10,000 - $30,000 MXN</li>
-                        </ul>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
-                        Número de Conglomerados en la Población
-                      </label>
-                      <input
-                        type="range"
-                        min="10"
-                        max="40"
-                        step="5"
-                        value={numClusters}
-                        onChange={(e) => setNumClusters(Number(e.target.value))}
-                        className="w-full"
-                      />
-                      <div className="text-center mt-2">
-                        <span className="text-2xl font-black bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                          {numClusters} conglomerados
+              {/* FASE B: Configuración (después de elegir fuente) */}
+              {sourceChosen !== null && (
+                <>
+                  {/* Indicador de fuente activa + botón cambiar */}
+                  <div className="flex items-center justify-between bg-slate-900/60 border border-white/10 rounded-xl px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      {sourceChosen === 'generated'
+                        ? <Shuffle className="w-5 h-5 text-indigo-400" />
+                        : <FileSpreadsheet className="w-5 h-5 text-yellow-400" />
+                      }
+                      <div>
+                        <span className="text-sm font-black text-white">
+                          {sourceChosen === 'generated' ? 'Datos generados' : uploadedFile ? uploadedFile.name : 'Archivo'}
                         </span>
-                        <p className="text-xs text-slate-500 mt-1">(Cada uno con 40-80 elementos)</p>
+                        <span className="text-xs text-slate-500 block">
+                          {sourceChosen === 'generated'
+                            ? `Población simulada · ~${numClusters * 60} elementos`
+                            : population.length > 0 ? `${population.length} registros` : 'Esperando archivo...'
+                          }
+                        </span>
                       </div>
                     </div>
-                  </>
-                )}
+                    <button
+                      onClick={resetToNoSource}
+                      className="text-xs font-bold text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 px-3 py-1.5 rounded-lg transition-all"
+                    >
+                      ← Cambiar fuente
+                    </button>
+                  </div>
 
-                {dataSource === 'file' && (
-                  <div>
-                    {!uploadedFile ? (
-                      <div
-                        onDrop={handleDrop}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer ${isDragging
-                          ? 'border-indigo-500 bg-indigo-500/10'
-                          : 'border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800/50'
-                          }`}
-                      >
-                        <Upload className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                        <h4 className="text-lg font-bold text-white mb-2">Arrastra tu archivo aquí</h4>
-                        <p className="text-sm text-slate-400 mb-4">
-                          Formatos soportados: CSV, XLSX, XLS
-                        </p>
-                        <label className="inline-block px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-bold cursor-pointer hover:scale-105 transition-transform">
-                          Seleccionar Archivo
-                          <input
-                            type="file"
-                            accept=".csv,.xlsx,.xls"
-                            onChange={handleFileUpload}
-                            className="hidden"
-                          />
-                        </label>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-green-500/30">
-                          <div className="flex items-center gap-3">
-                            <FileSpreadsheet className="w-8 h-8 text-green-400" />
-                            <div>
-                              <p className="font-bold text-white">{uploadedFile.name}</p>
-                              <p className="text-sm text-slate-400">{population.length} registros</p>
-                            </div>
+                  {/* CONTENIDO según fuente elegida */}
+                  <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
+
+                    {/* --- GENERATED --- */}
+                    {sourceChosen === 'generated' && (
+                      <>
+                        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3 mb-6">
+                          <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                          <div className="text-xs text-slate-300">
+                            <p className="mb-2">
+                              <strong className="text-blue-400">Población simulada:</strong> {numClusters} conglomerados con tamaños variables (40-80 elementos cada uno).
+                            </p>
+                            <p className="text-slate-400"><strong>Estratos y rangos salariales:</strong></p>
+                            <ul className="mt-1 space-y-0.5 text-slate-400">
+                              <li>• Ingeniería (30%): $18,000 - $35,000 MXN</li>
+                              <li>• Marketing (20%): $12,000 - $22,000 MXN</li>
+                              <li>• Soporte (10%): $8,000 - $15,000 MXN</li>
+                              <li>• Ventas (40%): $10,000 - $30,000 MXN</li>
+                            </ul>
                           </div>
-                          <button onClick={removeFile} className="p-2 hover:bg-red-500/20 rounded-lg">
-                            <X className="w-5 h-5 text-red-400" />
-                          </button>
                         </div>
 
-                        {availableColumns.length > 0 && (
-                          <div>
-                            <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
-                              Columna Numérica a Analizar
+                        <div>
+                          <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                            Número de Conglomerados en la Población
+                          </label>
+                          <input
+                            type="range" min="10" max="40" step="5"
+                            value={numClusters}
+                            onChange={(e) => setNumClusters(Number(e.target.value))}
+                            className="w-full"
+                          />
+                          <div className="text-center mt-2">
+                            <span className="text-2xl font-black bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                              {numClusters} conglomerados
+                            </span>
+                            <p className="text-xs text-slate-500 mt-1">(Cada uno con 40-80 elementos)</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* --- FILE --- */}
+                    {sourceChosen === 'file' && (
+                      <div>
+                        {!uploadedFile ? (
+                          <div
+                            onDrop={handleDrop}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer ${isDragging
+                              ? 'border-indigo-500 bg-indigo-500/10'
+                              : 'border-slate-700 hover:border-indigo-500/50 hover:bg-slate-800/50'
+                              }`}
+                          >
+                            <Upload className="w-12 h-12 text-slate-500 mx-auto mb-4" />
+                            <h4 className="text-lg font-bold text-white mb-2">Arrastra tu archivo aquí</h4>
+                            <p className="text-sm text-slate-400 mb-4">Formatos soportados: CSV, XLSX, XLS</p>
+                            <label className="inline-block px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-bold cursor-pointer hover:scale-105 transition-transform">
+                              Seleccionar Archivo
+                              <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} className="hidden" />
                             </label>
-                            <select
-                              value={selectedColumn}
-                              onChange={(e) => handleColumnChange(e.target.value)}
-                              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                            >
-                              {availableColumns.map((col) => (
-                                <option key={col} value={col}>{col}</option>
-                              ))}
-                            </select>
                           </div>
-                        )}
-
-                        {categoricalColumns.length > 0 && (
-                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-                            <div className="flex items-start gap-3 mb-3">
-                              <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-                              <div>
-                                <h4 className="font-bold text-blue-400 mb-1">Columnas Categóricas Detectadas</h4>
-                                <p className="text-xs text-slate-400">
-                                  Estas columnas pueden usarse para muestreo estratificado (2-20 categorías) o conglomerados (2-50 categorías)
-                                </p>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-green-500/30">
+                              <div className="flex items-center gap-3">
+                                <FileSpreadsheet className="w-8 h-8 text-green-400" />
+                                <div>
+                                  <p className="font-bold text-white">{uploadedFile.name}</p>
+                                  <p className="text-sm text-slate-400">{population.length} registros</p>
+                                </div>
                               </div>
+                              <button onClick={removeFile} className="p-2 hover:bg-red-500/20 rounded-lg">
+                                <X className="w-5 h-5 text-red-400" />
+                              </button>
                             </div>
 
-                            <div className="space-y-3">
-                              {categoricalColumns.map((col, idx) => {
-                                const isGoodForStrata = col.uniqueCount >= 2 && col.uniqueCount <= 20;
-                                const isGoodForCluster = col.uniqueCount >= 2 && col.uniqueCount <= 50;
+                            {availableColumns.length > 0 && (
+                              <div>
+                                <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                                  Columna Numérica a Analizar
+                                </label>
+                                <select
+                                  value={selectedColumn}
+                                  onChange={(e) => handleColumnChange(e.target.value)}
+                                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                >
+                                  {availableColumns.map((col) => (
+                                    <option key={col} value={col}>{col}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
 
-                                return (
-                                  <div key={idx} className="bg-slate-900/50 p-3 rounded-lg border border-blue-500/10">
-                                    <div className="flex items-center justify-between mb-2">
-                                      <span className="font-bold text-white">{col.name}</span>
-                                      <div className="flex gap-2">
-                                        <span className="text-xs text-blue-400 bg-blue-500/20 px-2 py-1 rounded">
-                                          {col.uniqueCount} categorías
-                                        </span>
-                                        {isGoodForStrata && (
-                                          <span className="text-xs text-pink-400 bg-pink-500/20 px-2 py-1 rounded">
-                                            ✓ Estratos
-                                          </span>
-                                        )}
-                                        {isGoodForCluster && (
-                                          <span className="text-xs text-purple-400 bg-purple-500/20 px-2 py-1 rounded">
-                                            ✓ Clusters
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="text-xs text-slate-400">
-                                      <span className="font-bold">Ejemplos:</span> {col.sampleValues.map(v => String(v)).join(', ')}
-                                      {col.uniqueCount > 5 && '...'}
-                                    </div>
+                            {categoricalColumns.length > 0 && (
+                              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+                                <div className="flex items-start gap-3 mb-3">
+                                  <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                                  <div>
+                                    <h4 className="font-bold text-blue-400 mb-1">Columnas Categóricas Detectadas</h4>
+                                    <p className="text-xs text-slate-400">
+                                      Estas columnas pueden usarse para muestreo estratificado (2-20 categorías) o conglomerados (2-50 categorías)
+                                    </p>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
+                                </div>
+                                <div className="space-y-3">
+                                  {categoricalColumns.map((col, idx) => {
+                                    const isGoodForStrata = col.uniqueCount >= 2 && col.uniqueCount <= 20;
+                                    const isGoodForCluster = col.uniqueCount >= 2 && col.uniqueCount <= 50;
+                                    return (
+                                      <div key={idx} className="bg-slate-900/50 p-3 rounded-lg border border-blue-500/10">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="font-bold text-white">{col.name}</span>
+                                          <div className="flex gap-2">
+                                            <span className="text-xs text-blue-400 bg-blue-500/20 px-2 py-1 rounded">{col.uniqueCount} categorías</span>
+                                            {isGoodForStrata && <span className="text-xs text-pink-400 bg-pink-500/20 px-2 py-1 rounded">✓ Estratos</span>}
+                                            {isGoodForCluster && <span className="text-xs text-purple-400 bg-purple-500/20 px-2 py-1 rounded">✓ Clusters</span>}
+                                          </div>
+                                        </div>
+                                        <div className="text-xs text-slate-400">
+                                          <span className="font-bold">Ejemplos:</span> {col.sampleValues.map(v => String(v)).join(', ')}{col.uniqueCount > 5 && '...'}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
 
-                        {categoricalColumns.length === 0 && availableColumns.length > 0 && (
-                          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex items-start gap-3">
-                            <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
-                            <div>
-                              <h4 className="font-bold text-yellow-400 mb-1">Sin Columnas Categóricas</h4>
-                              <p className="text-xs text-slate-400">
-                                No se detectaron columnas categóricas. Solo estarán disponibles los métodos Aleatorio Simple y Conglomerados.
-                              </p>
-                            </div>
+                            {categoricalColumns.length === 0 && availableColumns.length > 0 && (
+                              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex items-start gap-3">
+                                <AlertCircle className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
+                                <div>
+                                  <h4 className="font-bold text-yellow-400 mb-1">Sin Columnas Categóricas</h4>
+                                  <p className="text-xs text-slate-400">
+                                    No se detectaron columnas categóricas. Solo estarán disponibles los métodos Aleatorio Simple y Conglomerados.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     )}
                   </div>
-                )}
-              </div>
 
-              {/* CONFIGURACIÓN Y TOMAR MUESTRA */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1 space-y-6">
-                  <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 space-y-6">
-                    <h3 className="text-lg font-black flex items-center gap-2 text-white">
-                      <TrendingUp className="w-5 h-5 text-indigo-400" />
-                      Configuración
-                    </h3>
+                  {/* CONFIGURACIÓN + TOMAR MUESTRA */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-1 space-y-6">
+                      <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6 space-y-6">
+                        <h3 className="text-lg font-black flex items-center gap-2 text-white">
+                          <TrendingUp className="w-5 h-5 text-indigo-400" />
+                          Configuración
+                        </h3>
 
-                    <div className="space-y-4">
-                      <div className="p-4 bg-slate-800/50 rounded-xl border border-indigo-500/20">
-                        <div className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">
-                          Población (N)
-                        </div>
-                        <div className="text-3xl font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent text-center">
-                          {populationSize}
-                        </div>
-                      </div>
-
-                      {samplingMethod === 'cluster' ? (
-                        <div>
-                          <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
-                            Número de Conglomerados a Seleccionar
-                          </label>
-                          <input
-                            type="range"
-                            min="1"
-                            max={Math.max(1, clusterCount)}
-                            step="1"
-                            value={numClustersToSelect}
-                            onChange={(e) => {
-                              const v = Number(e.target.value);
-                              setNumClustersToSelect(v);
-                              setSample([]);
-                              setSelectedClusterIds([]);
-                            }}
-                            className="w-full"
-                          />
-                          <div className="text-center mt-2">
-                            <span className="text-3xl font-black bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                              {numClustersToSelect}
-                            </span>
-                            <p className="text-xs text-slate-400 mt-1">
-                              de {clusterCount} conglomerados disponibles
-                            </p>
-
-                            <div className="mt-3 bg-slate-950/40 border border-purple-500/20 rounded-xl px-3 py-2">
-                              <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-purple-300">
-                                <span className="px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/25">
-                                  ✓ Grupos completos
-                                </span>
-                                <span className="text-slate-400">
-                                  Seleccionas {numClustersToSelect} de {clusterCount} {clusterCount === 1 ? "conglomerado" : "conglomerados"}
-                                </span>
-                              </div>
-
-                              <div className="mt-1 text-[11px] text-slate-400 text-center leading-snug">
-                                {selectedClusterColumn
-                                  ? <>Base: <span className="text-white font-bold">{selectedClusterColumn}</span>. La muestra final depende del tamaño de cada conglomerado.</>
-                                  : <>Sin columna: agrupación automática. La muestra final depende del tamaño de cada conglomerado.</>
-                                }
-                              </div>
+                        <div className="space-y-4">
+                          <div className="p-4 bg-slate-800/50 rounded-xl border border-indigo-500/20">
+                            <div className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Población (N)</div>
+                            <div className="text-3xl font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent text-center">
+                              {populationSize}
                             </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div>
-                          <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
-                            Tamaño de Muestra (n)
-                          </label>
-                          <input
-                            type="range"
-                            min="10"
-                            max={Math.min(500, populationSize)}
-                            step="10"
-                            value={sampleSize}
-                            onChange={(e) => setSampleSize(Number(e.target.value))}
-                            className="w-full"
-                          />
-                          <div className="text-center mt-2">
-                            <span className="text-3xl font-black bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                              {sampleSize}
-                            </span>
-                          </div>
-                        </div>
-                      )}
 
-                      <div>
-                        <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
-                          Método de Muestreo
-                        </label>
-                        <select
-                          value={samplingMethod}
-                          onChange={(e) => {
-                            setSamplingMethod(e.target.value);
-                            setSample([]);
-                            setSelectedClusterIds([]);
-                            setStrataSummary([]);
-                          }}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                        >
-                          <option value="random">Aleatorio Simple</option>
-                          <option value="stratified" disabled={!availableMethods.includes('stratified')}>
-                            Estratificado {!availableMethods.includes('stratified') && '(No disponible)'}
-                          </option>
-                          <option value="cluster">Conglomerados</option>
-                        </select>
+                          {samplingMethod === 'cluster' ? (
+                            <div>
+                              <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                                Número de Conglomerados a Seleccionar
+                              </label>
+                              <input
+                                type="range" min="1" max={Math.max(1, clusterCount)} step="1"
+                                value={numClustersToSelect}
+                                onChange={(e) => {
+                                  const v = Number(e.target.value);
+                                  setNumClustersToSelect(v);
+                                  setSample([]);
+                                  setSelectedClusterIds([]);
+                                }}
+                                className="w-full"
+                              />
+                              <div className="text-center mt-2">
+                                <span className="text-3xl font-black bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                                  {numClustersToSelect}
+                                </span>
+                                <p className="text-xs text-slate-400 mt-1">de {clusterCount} conglomerados disponibles</p>
+                                <div className="mt-3 bg-slate-950/40 border border-purple-500/20 rounded-xl px-3 py-2">
+                                  <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-purple-300">
+                                    <span className="px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/25">✓ Grupos completos</span>
+                                    <span className="text-slate-400">Seleccionas {numClustersToSelect} de {clusterCount} {clusterCount === 1 ? "conglomerado" : "conglomerados"}</span>
+                                  </div>
+                                  <div className="mt-1 text-[11px] text-slate-400 text-center leading-snug">
+                                    {selectedClusterColumn
+                                      ? <>Base: <span className="text-white font-bold">{selectedClusterColumn}</span>. La muestra final depende del tamaño de cada conglomerado.</>
+                                      : <>Sin columna: agrupación automática. La muestra final depende del tamaño de cada conglomerado.</>
+                                    }
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                                Tamaño de Muestra (n)
+                              </label>
+                              <input
+                                type="range" min="10" max={Math.min(500, populationSize)} step="10"
+                                value={sampleSize}
+                                onChange={(e) => setSampleSize(Number(e.target.value))}
+                                className="w-full"
+                              />
+                              <div className="text-center mt-2">
+                                <span className="text-3xl font-black bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                                  {sampleSize}
+                                </span>
+                              </div>
+                            </div>
+                          )}
 
-                        {!availableMethods.includes('stratified') && (
-                          <div className="mt-2 text-xs text-yellow-400 flex items-center gap-2">
-                            <AlertCircle className="w-3 h-3" />
-                            <span>Requiere columnas categóricas</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {samplingMethod === 'stratified' && categoricalColumns.length > 0 && dataSource === 'file' && (
-                        <div>
-                          <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
-                            Columna para Estratos
-                          </label>
-                          <select
-                            value={selectedStratColumn}
-                            onChange={(e) => handleStratColumnChange(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                          >
-                            {categoricalColumns
-                              .filter(c => c.uniqueCount >= 2 && c.uniqueCount <= 20)
-                              .map((col) => (
-                                <option key={col.name} value={col.name}>
-                                  {col.name} ({col.uniqueCount} grupos)
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-                      )}
-
-                      {samplingMethod === 'cluster' && dataSource === 'file' && clusterColumns.length > 0 && (
-                        <div>
-                          <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
-                            Columna para Conglomerados
-                          </label>
-                          <select
-                            value={selectedClusterColumn}
-                            onChange={(e) => {
-                              const col = e.target.value;
-                              setSelectedClusterColumn(col);
-                              createPopulationFromColumn(fileData, selectedColumn, selectedStratColumn || null, col || null);
-                              setStrataSummary([]);
-                              setSelectedClusterIds([]);
-                            }}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                          >
-                            <option value="">(Sin columna: usar agrupación automática)</option>
-                            {clusterColumns.map((c) => (
-                              <option key={c.name} value={c.name}>
-                                {c.name} ({c.uniqueCount} conglomerados)
+                          <div>
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                              Método de Muestreo
+                            </label>
+                            <select
+                              value={samplingMethod}
+                              onChange={(e) => {
+                                setSamplingMethod(e.target.value);
+                                setSample([]);
+                                setSelectedClusterIds([]);
+                                setStrataSummary([]);
+                              }}
+                              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            >
+                              <option value="random">Aleatorio Simple</option>
+                              <option value="stratified" disabled={!availableMethods.includes('stratified')}>
+                                Estratificado {!availableMethods.includes('stratified') && '(No disponible)'}
                               </option>
-                            ))}
-                          </select>
-
-                          <p className="mt-2 text-xs text-slate-400">
-                            Los conglomerados serán los grupos definidos por <span className="text-white font-bold">{selectedClusterColumn || "agrupación automática"}</span>.
-                          </p>
-                        </div>
-                      )}
-
-                      <button
-                        onClick={takeSample}
-                        disabled={isAnimating || population.length === 0}
-                        className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-black text-lg hover:scale-105 transition-transform shadow-2xl shadow-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                      >
-                        {isAnimating ? (
-                          <>
-                            <RefreshCw className="w-5 h-5 animate-spin" />
-                            Tomando...
-                          </>
-                        ) : (
-                          <>
-                            <Shuffle className="w-5 h-5" />
-                            Tomar Muestra
-                          </>
-                        )}
-                      </button>
-
-                      {sample.length > 0 && (
-                        <button
-                          onClick={downloadSampleCSV}
-                          className="w-full py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-                        >
-                          <Download className="w-4 h-4" />
-                          Descargar Muestra CSV
-                        </button>
-                      )}
-
-                      {dataSource === 'generated' && (
-                        <button
-                          onClick={generatePopulation}
-                          className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
-                        >
-                          <RefreshCw className="w-4 h-4" />
-                          Nueva Población
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* TABLA DE MUESTRA */}
-                <div className="lg:col-span-2 space-y-6">
-                  {sample.length > 0 && (
-                    <>
-                      {dataSource === 'generated' && (
-                        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
-                          <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-slate-300">
-                              <strong className="text-blue-400">Variable analizada:</strong> Salario mensual (MXN) – Variable cuantitativa continua
-                            </p>
-                            <p className="text-xs text-slate-400 mt-1">
-                              Cada "valor" en la tabla representa el salario mensual de un individuo. Los rangos varían según el departamento para reflejar la realidad.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {dataSource === 'file' && selectedColumn && (
-                        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
-                          <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-slate-300">
-                              <strong className="text-blue-400">Variable analizada:</strong> {selectedColumnLabel}
-                            </p>
-                            <p className="text-xs text-slate-400 mt-1">
-                              Esta es la variable numérica que se está analizando en el ejercicio de muestreo.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {samplingMethod === 'stratified' && strataSummary.length > 0 && (
-                        <div className="bg-slate-800/40 border border-slate-600/40 rounded-xl p-4">
-                          <h4 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-                            <BarChart3 className="w-4 h-4 text-pink-400" />
-                            Resumen por Estrato
-                          </h4>
-
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs text-slate-300">
-                              <thead>
-                                <tr className="text-slate-400 border-b border-slate-700">
-                                  <th className="px-3 py-2 text-left font-bold">Estrato</th>
-                                  <th className="px-3 py-2 text-right font-bold">Población (Nₕ)</th>
-                                  <th className="px-3 py-2 text-right font-bold">% Población</th>
-                                  <th className="px-3 py-2 text-right font-bold">Muestra (nₕ)</th>
-                                  <th className="px-3 py-2 text-right font-bold">% Muestra</th>
-                                  <th className="px-3 py-2 text-right font-bold">nₕ / Nₕ</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-700/50">
-                                {strataSummary.map((s) => (
-                                  <tr key={s.estrato} className="hover:bg-slate-700/20">
-                                    <td className="px-3 py-2 font-semibold text-white">{s.estrato}</td>
-                                    <td className="px-3 py-2 text-right">{s.Nh}</td>
-                                    <td className="px-3 py-2 text-right text-slate-400">{s.Nh_pct}%</td>
-                                    <td className="px-3 py-2 text-right font-bold text-pink-300">{s.nh}</td>
-                                    <td className="px-3 py-2 text-right text-pink-400">{s.nh_pct}%</td>
-                                    <td className="px-3 py-2 text-right font-mono text-indigo-300">{s.frac}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-
-                          <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
-                            En estratificado proporcional, la fracción <strong className="text-white">nₕ/Nₕ</strong> es similar en todos los estratos,
-                            garantizando que cada grupo contribuya proporcionalmente a su tamaño en la población.
-                          </p>
-                        </div>
-                      )}
-
-                      <div className="glass rounded-3xl p-8">
-                        <div className="flex items-center justify-between mb-6">
-                          <div>
-                            <h3 className="text-xl font-black text-white flex items-center gap-2">
-                              <TableIcon className="w-6 h-6 text-indigo-400" />
-                              {samplingMethod === 'stratified'
-                                ? `Muestra Obtenida – Muestreo Estratificado Proporcional (n = ${sample.length})`
-                                : `Muestra Obtenida (${sample.length} elementos)`
-                              }
-                            </h3>
-
-                            {dataSource === 'file' && (
-                              <div className="mt-2 text-xs text-slate-400 space-y-1">
-                                {samplingMethod === 'stratified' && selectedStratColumn && (
-                                  <div>Estratos basados en: <span className="text-white font-bold">{selectedStratColumn}</span></div>
-                                )}
-                                {samplingMethod === 'cluster' && selectedClusterColumn && (
-                                  <div>Conglomerados basados en: <span className="text-white font-bold">{selectedClusterColumn}</span></div>
-                                )}
+                              <option value="cluster">Conglomerados</option>
+                            </select>
+                            {!availableMethods.includes('stratified') && (
+                              <div className="mt-2 text-xs text-yellow-400 flex items-center gap-2">
+                                <AlertCircle className="w-3 h-3" />
+                                <span>Requiere columnas categóricas</span>
                               </div>
                             )}
+                          </div>
 
-                            {samplingMethod === 'cluster' && (
-                              <div className="mt-2 text-xs text-slate-400 space-y-1">
-                                <div>
-                                  Conglomerados seleccionados:{" "}
-                                  <span className="text-white font-bold">{numClustersToSelect}</span> ·
-                                  Tamaño final:{" "}
-                                  <span className="text-white font-bold">{sample.length}</span>
-                                  <span className="text-purple-400 ml-2">✓ Conglomerados completos</span>
-                                </div>
-                                {selectedClusterIds.length > 0 && (
-                                  <div>
-                                    IDs (tamaño):{" "}
-                                    <span className="text-white font-bold">
-                                      {selectedClusterIds
-                                        .map((cid) => {
-                                          const size = sample.filter(s => String(s.cluster) === String(cid)).length;
-                                          return `${cid} (${size})`;
-                                        })
-                                        .join(", ")}
-                                    </span>
+                          {samplingMethod === 'stratified' && categoricalColumns.length > 0 && dataSource === 'file' && (
+                            <div>
+                              <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                                Columna para Estratos
+                              </label>
+                              <select
+                                value={selectedStratColumn}
+                                onChange={(e) => handleStratColumnChange(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                              >
+                                {categoricalColumns
+                                  .filter(c => c.uniqueCount >= 2 && c.uniqueCount <= 20)
+                                  .map((col) => (
+                                    <option key={col.name} value={col.name}>{col.name} ({col.uniqueCount} grupos)</option>
+                                  ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {samplingMethod === 'cluster' && dataSource === 'file' && clusterColumns.length > 0 && (
+                            <div>
+                              <label className="text-xs font-black text-slate-500 uppercase tracking-wider block mb-2">
+                                Columna para Conglomerados
+                              </label>
+                              <select
+                                value={selectedClusterColumn}
+                                onChange={(e) => {
+                                  const col = e.target.value;
+                                  setSelectedClusterColumn(col);
+                                  createPopulationFromColumn(fileData, selectedColumn, selectedStratColumn || null, col || null);
+                                  setStrataSummary([]);
+                                  setSelectedClusterIds([]);
+                                }}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-bold text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                              >
+                                <option value="">(Sin columna: usar agrupación automática)</option>
+                                {clusterColumns.map((c) => (
+                                  <option key={c.name} value={c.name}>{c.name} ({c.uniqueCount} conglomerados)</option>
+                                ))}
+                              </select>
+                              <p className="mt-2 text-xs text-slate-400">
+                                Los conglomerados serán los grupos definidos por <span className="text-white font-bold">{selectedClusterColumn || "agrupación automática"}</span>.
+                              </p>
+                            </div>
+                          )}
+
+                          <button
+                            onClick={takeSample}
+                            disabled={isAnimating || population.length === 0}
+                            className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-black text-lg hover:scale-105 transition-transform shadow-2xl shadow-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            {isAnimating ? (
+                              <><RefreshCw className="w-5 h-5 animate-spin" /> Tomando...</>
+                            ) : (
+                              <><Shuffle className="w-5 h-5" /> Tomar Muestra</>
+                            )}
+                          </button>
+
+                          {sample.length > 0 && (
+                            <button
+                              onClick={downloadSampleCSV}
+                              className="w-full py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                            >
+                              <Download className="w-4 h-4" /> Descargar Muestra CSV
+                            </button>
+                          )}
+
+                          {dataSource === 'generated' && (
+                            <button
+                              onClick={generatePopulation}
+                              className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                            >
+                              <RefreshCw className="w-4 h-4" /> Nueva Población
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* TABLA DE MUESTRA */}
+                    <div className="lg:col-span-2 space-y-6">
+                      {sample.length > 0 && (
+                        <>
+                          {/* Feedback de éxito */}
+                          <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 flex items-start gap-3">
+                            <span className="text-green-400 text-lg shrink-0">✓</span>
+                            <p className="text-sm text-slate-300">
+                              <strong className="text-green-400">Muestra tomada correctamente</strong> · n = {sample.length} elementos usando{' '}
+                              {samplingMethod === 'random' ? 'Aleatorio Simple' : samplingMethod === 'stratified' ? 'Estratificado' : 'Conglomerados'}.
+                              Ahora puedes explorar los resultados en la pestaña <strong className="text-green-400">Análisis</strong>.
+                            </p>
+                          </div>
+
+                          {dataSource === 'generated' && (
+                            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+                              <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-sm text-slate-300">
+                                  <strong className="text-blue-400">Variable analizada:</strong> Salario mensual (MXN) – Variable cuantitativa continua
+                                </p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                  Cada "valor" en la tabla representa el salario mensual de un individuo. Los rangos varían según el departamento para reflejar la realidad.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {dataSource === 'file' && selectedColumn && (
+                            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+                              <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-sm text-slate-300">
+                                  <strong className="text-blue-400">Variable analizada:</strong> {selectedColumnLabel}
+                                </p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                  Esta es la variable numérica que se está analizando en el ejercicio de muestreo.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {samplingMethod === 'stratified' && strataSummary.length > 0 && (
+                            <div className="bg-slate-800/40 border border-slate-600/40 rounded-xl p-4">
+                              <h4 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+                                <BarChart3 className="w-4 h-4 text-pink-400" /> Resumen por Estrato
+                              </h4>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs text-slate-300">
+                                  <thead>
+                                    <tr className="text-slate-400 border-b border-slate-700">
+                                      <th className="px-3 py-2 text-left font-bold">Estrato</th>
+                                      <th className="px-3 py-2 text-right font-bold">Población (Nₕ)</th>
+                                      <th className="px-3 py-2 text-right font-bold">% Población</th>
+                                      <th className="px-3 py-2 text-right font-bold">Muestra (nₕ)</th>
+                                      <th className="px-3 py-2 text-right font-bold">% Muestra</th>
+                                      <th className="px-3 py-2 text-right font-bold">nₕ / Nₕ</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-700/50">
+                                    {strataSummary.map((s) => (
+                                      <tr key={s.estrato} className="hover:bg-slate-700/20">
+                                        <td className="px-3 py-2 font-semibold text-white">{s.estrato}</td>
+                                        <td className="px-3 py-2 text-right">{s.Nh}</td>
+                                        <td className="px-3 py-2 text-right text-slate-400">{s.Nh_pct}%</td>
+                                        <td className="px-3 py-2 text-right font-bold text-pink-300">{s.nh}</td>
+                                        <td className="px-3 py-2 text-right text-pink-400">{s.nh_pct}%</td>
+                                        <td className="px-3 py-2 text-right font-mono text-indigo-300">{s.frac}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
+                                En estratificado proporcional, la fracción <strong className="text-white">nₕ/Nₕ</strong> es similar en todos los estratos,
+                                garantizando que cada grupo contribuya proporcionalmente a su tamaño en la población.
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="glass rounded-3xl p-8">
+                            <div className="flex items-center justify-between mb-6">
+                              <div>
+                                <h3 className="text-xl font-black text-white flex items-center gap-2">
+                                  <TableIcon className="w-6 h-6 text-indigo-400" />
+                                  {samplingMethod === 'stratified'
+                                    ? `Muestra – Estratificado Proporcional (n = ${sample.length})`
+                                    : `Muestra Obtenida (${sample.length} elementos)`}
+                                </h3>
+                                {dataSource === 'file' && (
+                                  <div className="mt-2 text-xs text-slate-400 space-y-1">
+                                    {samplingMethod === 'stratified' && selectedStratColumn && (
+                                      <div>Estratos basados en: <span className="text-white font-bold">{selectedStratColumn}</span></div>
+                                    )}
+                                    {samplingMethod === 'cluster' && selectedClusterColumn && (
+                                      <div>Conglomerados basados en: <span className="text-white font-bold">{selectedClusterColumn}</span></div>
+                                    )}
+                                  </div>
+                                )}
+                                {samplingMethod === 'cluster' && (
+                                  <div className="mt-2 text-xs text-slate-400 space-y-1">
+                                    <div>
+                                      Conglomerados seleccionados: <span className="text-white font-bold">{numClustersToSelect}</span> ·
+                                      Tamaño final: <span className="text-white font-bold">{sample.length}</span>
+                                      <span className="text-purple-400 ml-2">✓ Conglomerados completos</span>
+                                    </div>
+                                    {selectedClusterIds.length > 0 && (
+                                      <div>
+                                        IDs (tamaño): <span className="text-white font-bold">
+                                          {selectedClusterIds.map((cid) => {
+                                            const size = sample.filter(s => String(s.cluster) === String(cid)).length;
+                                            return `${cid} (${size})`;
+                                          }).join(", ")}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
-                            )}
+                            </div>
+
+                            <div className="bg-slate-950/50 rounded-xl border border-white/10 overflow-hidden">
+                              <div className="overflow-x-auto max-h-96">
+                                <table className="w-full">
+                                  <thead className="bg-indigo-500/20 sticky top-0 z-10">
+                                    <tr>
+                                      <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">ID</th>
+                                      <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">{selectedColumnLabel}</th>
+                                      {samplingMethod === 'stratified' && <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">Estrato</th>}
+                                      {samplingMethod === 'cluster' && <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">Conglomerado</th>}
+                                      <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">Información de Muestreo</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-white/5">
+                                    {sample.map((item, idx) => (
+                                      <tr key={`${item.id}-${idx}`} className="hover:bg-white/5 transition-colors">
+                                        <td className="px-4 py-3 text-sm font-bold text-slate-300">{item.id}</td>
+                                        <td className="px-4 py-3 text-sm font-bold text-white">
+                                          {dataSource === 'generated' ? `$${item.value.toLocaleString()}` : item.value}
+                                        </td>
+                                        {samplingMethod === 'stratified' && <td className="px-4 py-3 text-xs font-bold text-pink-300">{item.stratGroup ?? "—"}</td>}
+                                        {samplingMethod === 'cluster' && <td className="px-4 py-3 text-xs font-bold text-purple-300">{item.cluster ?? "—"}</td>}
+                                        <td className="px-4 py-3 text-xs text-slate-400">{item.samplingInfo}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl border border-indigo-500/20">
+                              <p className="text-sm text-slate-300 text-center">
+                                <strong className="text-indigo-400">💡 Observa:</strong> {
+                                  samplingMethod === 'stratified'
+                                    ? 'Cada estrato contribuye proporcionalmente a su tamaño en la población'
+                                    : samplingMethod === 'cluster'
+                                      ? `Se seleccionaron ${numClustersToSelect} conglomerados completos. El tamaño final (${sample.length}) depende del tamaño de los conglomerados elegidos, NO de un tamaño de muestra predefinido.`
+                                      : 'Cada elemento fue seleccionado con la misma probabilidad'
+                                }
+                              </p>
+                            </div>
                           </div>
-                        </div>
+                        </>
+                      )}
 
-                        <div className="bg-slate-950/50 rounded-xl border border-white/10 overflow-hidden">
-                          <div className="overflow-x-auto max-h-96">
-                            <table className="w-full">
-                              <thead className="bg-indigo-500/20 sticky top-0 z-10">
-                                <tr>
-                                  <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">ID</th>
-                                  <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">{selectedColumnLabel}</th>
-                                  {samplingMethod === 'stratified' && (
-                                    <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">
-                                      Estrato
-                                    </th>
-                                  )}
-                                  {samplingMethod === 'cluster' && (
-                                    <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">
-                                      Conglomerado
-                                    </th>
-                                  )}
-                                  <th className="px-4 py-3 text-left text-xs font-black text-indigo-400 uppercase tracking-wider">Información de Muestreo</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-white/5">
-                                {sample.map((item, idx) => (
-                                  <tr key={`${item.id}-${idx}`} className="hover:bg-white/5 transition-colors">
-                                    <td className="px-4 py-3 text-sm font-bold text-slate-300">
-                                      {item.id}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm font-bold text-white">
-                                      {dataSource === 'generated'
-                                        ? `$${item.value.toLocaleString()}`
-                                        : item.value}
-                                    </td>
-                                    {samplingMethod === 'stratified' && (
-                                      <td className="px-4 py-3 text-xs font-bold text-pink-300">
-                                        {item.stratGroup ?? "—"}
-                                      </td>
-                                    )}
-                                    {samplingMethod === 'cluster' && (
-                                      <td className="px-4 py-3 text-xs font-bold text-purple-300">
-                                        {item.cluster ?? "—"}
-                                      </td>
-                                    )}
-                                    <td className="px-4 py-3 text-xs text-slate-400">{item.samplingInfo}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                      {sample.length === 0 && sourceChosen !== null && (
+                        <div className="glass rounded-3xl p-12 text-center min-h-[500px] flex flex-col items-center justify-center">
+                          <div className="relative mb-6">
+                            <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-2xl" />
+                            <div className="relative w-32 h-32 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
+                              <TableIcon className="w-16 h-16 text-slate-700" />
+                            </div>
                           </div>
+                          <h3 className="text-2xl font-black text-white mb-2">Toma tu Primera Muestra</h3>
+                          <p className="text-slate-400">Configura los parámetros y presiona "Tomar Muestra" para comenzar</p>
                         </div>
-
-                        <div className="mt-4 p-4 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl border border-indigo-500/20">
-                          <p className="text-sm text-slate-300 text-center">
-                            <strong className="text-indigo-400">💡 Observa:</strong> {
-                              samplingMethod === 'stratified'
-                                ? 'Cada estrato contribuye proporcionalmente a su tamaño en la población'
-                                : samplingMethod === 'cluster'
-                                  ? `Se seleccionaron ${numClustersToSelect} conglomerados completos. El tamaño final (${sample.length}) depende del tamaño de los conglomerados elegidos, NO de un tamaño de muestra predefinido.`
-                                  : 'Cada elemento fue seleccionado con la misma probabilidad'
-                            }
-                          </p>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {sample.length === 0 && (
-                    <div className="glass rounded-3xl p-12 text-center min-h-[500px] flex flex-col items-center justify-center">
-                      <div className="relative mb-6">
-                        <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-2xl" />
-                        <div className="relative w-32 h-32 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
-                          <TableIcon className="w-16 h-16 text-slate-700" />
-                        </div>
-                      </div>
-                      <h3 className="text-2xl font-black text-white mb-2">Toma tu Primera Muestra</h3>
-                      <p className="text-slate-400">
-                        Configura los parámetros y presiona "Tomar Muestra" para comenzar
-                      </p>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ============================================ */}
+          {/* TAB: ANÁLISIS                               */}
+          {/* ============================================ */}
+          {activeTab === 'analisis' && (
+            <div className="p-6 space-y-6">
+
+              {/* TEXTO ACLARATORIO — solicitado por el profesor */}
+              <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 flex items-start gap-3">
+                <Info className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  <strong className="text-indigo-400">Nota:</strong> Esta sección permite evaluar
+                  cuál método de muestreo es más adecuado para los datos,
+                  <strong> incluso sin haber tomado una muestra</strong>.
+                </p>
               </div>
 
-            </div>
-          )}
-
-          {/* ============================================================================ */}
-          {/* ✅ TAB 2: ANÁLISIS */}
-          {/* ============================================================================ */}
-          {activeTab === 'analisis' && (
-            <div className="p-6">
+              {/* CONTENIDO DEL ANÁLISIS */}
               <AnalysisSection />
+
             </div>
           )}
 
-          {/* ============================================================================ */}
-          {/* ✅ TAB 3: AVANZADO (Histograma + Estadísticas) */}
-          {/* ============================================================================ */}
+          {/* ============================================ */}
+          {/* TAB: AVANZADO                               */}
+          {/* ============================================ */}
           {activeTab === 'avanzado' && (
             <div className="p-6 space-y-6">
 
@@ -2065,19 +2126,23 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                 <div className="glass rounded-3xl p-12 text-center">
                   <div className="relative mb-6">
                     <div className="absolute inset-0 bg-purple-500/20 rounded-full blur-2xl" />
-                    <div className="relative w-32 h-32 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
+                    <div className="relative w-32 h-32 bg-white/5 rounded-full flex items-center justify-center border border-white/10 mx-auto">
                       <BarChart3 className="w-16 h-16 text-slate-700" />
                     </div>
                   </div>
                   <h3 className="text-2xl font-black text-white mb-2">Toma una Muestra Primero</h3>
-                  <p className="text-slate-400">
-                    Ve a la pestaña "Muestreo" y toma una muestra para ver el análisis estadístico avanzado
-                  </p>
+                  <p className="text-slate-400">Ve a la pestaña "Muestreo" y toma una muestra para ver el análisis estadístico avanzado</p>
                 </div>
               )}
 
               {sample.length > 0 && (
                 <>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-pink-400 bg-pink-500/10 border border-pink-500/20 px-3 py-1 rounded-full">
+                      📈 Análisis basado en la muestra actual (n = {sample.length})
+                    </span>
+                  </div>
+
                   <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex items-start gap-3">
                     <Info className="w-5 h-5 text-yellow-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-slate-300">
@@ -2089,18 +2154,15 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                     <h4 className="text-lg font-black text-white mb-4">
                       {samplingMethod === 'cluster'
                         ? 'Distribución por Conglomerado: Población vs Muestra'
-                        : `Distribución de ${selectedColumnLabel}: Población vs Muestra`
-                      }
+                        : `Distribución de ${selectedColumnLabel}: Población vs Muestra`}
                     </h4>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart data={histogramData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
                         <XAxis
-                          dataKey="rango"
-                          stroke="#94a3b8"
+                          dataKey="rango" stroke="#94a3b8"
                           tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
-                          axisLine={false}
-                          tickLine={false}
+                          axisLine={false} tickLine={false}
                           height={samplingMethod === "cluster" ? 80 : 50}
                           interval={0}
                           angle={samplingMethod === "cluster" ? -35 : 0}
@@ -2112,34 +2174,17 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                             style: { fill: '#94a3b8', fontWeight: 700, fontSize: 12 }
                           }}
                         />
-
                         <YAxis
                           stroke="#94a3b8"
                           tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }}
-                          axisLine={false}
-                          tickLine={false}
-                          label={{
-                            value: 'Frecuencia',
-                            angle: -90,
-                            position: 'insideLeft',
-                            style: { textAnchor: 'middle', fill: '#94a3b8', fontWeight: 700, fontSize: 12 }
-                          }}
+                          axisLine={false} tickLine={false}
+                          label={{ value: 'Frecuencia', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#94a3b8', fontWeight: 700, fontSize: 12 } }}
                         />
                         <Tooltip
-                          contentStyle={{
-                            backgroundColor: '#1e293b',
-                            border: '1px solid #334155',
-                            borderRadius: '12px',
-                            fontWeight: 700
-                          }}
+                          contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '12px', fontWeight: 700 }}
                           cursor={{ fill: 'rgba(99, 102, 241, 0.1)' }}
                         />
-                        <Legend
-                          wrapperStyle={{ fontWeight: 700 }}
-                          iconType="circle"
-                          verticalAlign="bottom"
-                          align="center"
-                        />
+                        <Legend wrapperStyle={{ fontWeight: 700 }} iconType="circle" verticalAlign="bottom" align="center" />
                         <Bar dataKey="Población" fill="#6366f1" radius={[8, 8, 0, 0]} />
                         <Bar dataKey="Muestra" fill="#ec4899" radius={[8, 8, 0, 0]} />
                       </BarChart>
@@ -2152,7 +2197,6 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                         <div className="text-center">
                           <h4 className="font-bold text-indigo-400 mb-4">Población</h4>
                         </div>
-
                         {[
                           { label: "Media (μ)", value: popStats.mean, color: "from-blue-500 to-cyan-500" },
                           { label: "Mediana", value: popStats.median, color: "from-indigo-500 to-purple-500" },
@@ -2170,13 +2214,11 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
                         <div className="text-center">
                           <h4 className="font-bold text-pink-400 mb-4">Muestra</h4>
                         </div>
-
                         {(() => {
                           const popMean = parseFloat(popStats.mean);
                           const sampleMean = parseFloat(sampleStats.mean);
                           const popMedian = parseFloat(popStats.median);
                           const sampleMedian = parseFloat(sampleStats.median);
-
                           return [
                             { label: "Media (x̄)", value: sampleStats.mean, diff: Math.abs(popMean - sampleMean).toFixed(2) },
                             { label: "Mediana", value: sampleStats.median, diff: Math.abs(popMedian - sampleMedian).toFixed(2) },
@@ -2199,57 +2241,45 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
               )}
             </div>
           )}
-
         </div>
 
+        {/* CONCEPTOS CLAVE */}
         <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
           <h3 className="text-2xl font-black text-white mb-6">Conceptos Clave</h3>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-slate-950/50 p-6 rounded-2xl border border-indigo-500/20">
               <div className="flex items-start gap-4">
                 <div className="text-4xl">👥</div>
                 <div>
                   <h4 className="font-black text-lg text-indigo-400 mb-2">Población (N)</h4>
-                  <p className="text-sm text-slate-400 leading-relaxed">
-                    Conjunto completo de todos los elementos que comparten una característica común y queremos estudiar.
-                  </p>
+                  <p className="text-sm text-slate-400 leading-relaxed">Conjunto completo de todos los elementos que comparten una característica común y queremos estudiar.</p>
                 </div>
               </div>
             </div>
-
             <div className="bg-slate-950/50 p-6 rounded-2xl border border-pink-500/20">
               <div className="flex items-start gap-4">
                 <div className="text-4xl">🎯</div>
                 <div>
                   <h4 className="font-black text-lg text-pink-400 mb-2">Muestra (n)</h4>
-                  <p className="text-sm text-slate-400 leading-relaxed">
-                    Subconjunto representativo de la población seleccionado para estudio cuando analizar toda la población es inviable.
-                  </p>
+                  <p className="text-sm text-slate-400 leading-relaxed">Subconjunto representativo de la población seleccionado para estudio cuando analizar toda la población es inviable.</p>
                 </div>
               </div>
             </div>
-
             <div className="bg-slate-950/50 p-6 rounded-2xl border border-purple-500/20">
               <div className="flex items-start gap-4">
                 <div className="text-4xl">⚖️</div>
                 <div>
                   <h4 className="font-black text-lg text-purple-400 mb-2">Representatividad</h4>
-                  <p className="text-sm text-slate-400 leading-relaxed">
-                    Una buena muestra refleja las características de la población. El muestreo probabilístico garantiza esto.
-                  </p>
+                  <p className="text-sm text-slate-400 leading-relaxed">Una buena muestra refleja las características de la población. El muestreo probabilístico garantiza esto.</p>
                 </div>
               </div>
             </div>
-
             <div className="bg-slate-950/50 p-6 rounded-2xl border border-cyan-500/20">
               <div className="flex items-start gap-4">
                 <div className="text-4xl">🔀</div>
                 <div>
                   <h4 className="font-black text-lg text-cyan-400 mb-2">Muestreo Probabilístico</h4>
-                  <p className="text-sm text-slate-400 leading-relaxed">
-                    Cada elemento tiene una probabilidad conocida de ser incluido. Esto permite generalizar resultados a toda la población.
-                  </p>
+                  <p className="text-sm text-slate-400 leading-relaxed">Cada elemento tiene una probabilidad conocida de ser incluido. Esto permite generalizar resultados a toda la población.</p>
                 </div>
               </div>
             </div>
@@ -2264,7 +2294,6 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
           border: 1px solid rgba(255, 255, 255, 0.1);
         }
       `}</style>
-
     </div>
   );
 };
