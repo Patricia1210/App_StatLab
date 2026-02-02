@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ArrowLeft, Upload, FileSpreadsheet, X, Download,
   CheckCircle, XCircle, Target, Lightbulb, AlertCircle,
@@ -31,6 +31,11 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
   const [areaProgress, setAreaProgress] = useState({});
   const [selectedColumn, setSelectedColumn] = useState(null);
   const [areaScore, setAreaScore] = useState(0);
+  const [instantFeedback, setInstantFeedback] = useState(null);
+  const [cardResults, setCardResults] = useState({});
+  const [areaFeedback, setAreaFeedback] = useState(null);
+  const areaFeedbackTimerRef = useRef(null);
+
 
   const dataExamples = {
     basic: [
@@ -254,10 +259,19 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     });
     setShowFeedback(false);
     setSelectedCard(null);
+    setInstantFeedback(null);
+    setCardResults({});
   };
 
   const handleCardSelect = (card) => {
     setSelectedCard(card);
+  };
+
+  const categoryNames = {
+    nominal: 'Cualitativo Nominal',
+    ordinal: 'Cualitativo Ordinal',
+    discrete: 'Cuantitativo Discreto',
+    continuous: 'Cuantitativo Continuo'
   };
 
   const handleCategoryClick = (category) => {
@@ -266,53 +280,93 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
       return;
     }
 
+    // mover la tarjeta a la categoría elegida
     const newClassifications = { ...classifications };
-    
     Object.keys(newClassifications).forEach(key => {
       newClassifications[key] = newClassifications[key].filter(c => c.id !== selectedCard.id);
     });
-    
     newClassifications[category].push(selectedCard);
     setClassifications(newClassifications);
+
+    // ✅ calificación inmediata
+    const ok = selectedCard.correct === category;
+    setAttempts(a => a + 1);
+    setScore(s => s + (ok ? 1 : 0));
+
+    // ✅ Guardar resultado por tarjeta
+    setCardResults(prev => ({
+      ...prev,
+      [selectedCard.id]: ok
+    }));
+
+    setInstantFeedback({
+      ok,
+      text: selectedCard.text,
+      explanation: selectedCard.explanation,
+      correctLabel: categoryNames[selectedCard.correct]
+    });
+
+    // limpiar selección
     setSelectedCard(null);
+
+    // ocultar feedback
+    setTimeout(() => setInstantFeedback(null), 1400);
+
+    // ✅ si ya clasificó todo, nueva ronda automática
+    const allPlacedAfter = currentCards.every(c =>
+      Object.values(newClassifications).some(arr => arr.some(x => x.id === c.id))
+    );
+
+    if (allPlacedAfter) {
+      setTimeout(() => {
+        generateNewRound();
+      }, 900);
+    }
   };
 
   const handleColumnClassification = (column, selectedType) => {
     const isCorrect = column.type === selectedType;
-    
-    const newProgress = { ...areaProgress };
-    if (!newProgress[selectedArea]) {
-      newProgress[selectedArea] = {};
-    }
-    newProgress[selectedArea][column.key] = {
-      classified: true,
-      correct: isCorrect,
-      selectedType: selectedType
-    };
-    setAreaProgress(newProgress);
-    
-    if (isCorrect) {
-      setAreaScore(areaScore + 10);
-    }
-    
-    setSelectedColumn(null);
+
+    setAreaProgress(prev => {
+      const next = { ...prev };
+      if (!next[selectedArea]) next[selectedArea] = {};
+      next[selectedArea][column.key] = {
+        classified: true,
+        correct: isCorrect,
+        selectedType
+      };
+      return next;
+    });
+
+    if (isCorrect) setAreaScore(s => s + 10);
+
+    // ✅ Feedback independiente y MUY visible
+    setAreaFeedback({
+      column,
+      isCorrect,
+      selectedType,
+      // para mostrar el área actual (por si cambian rápido de pestaña)
+      areaKey: selectedArea,
+      ts: Date.now()
+    });
+
+    // ✅ Reset de timer (evita que se “corte” si contestan rápido varias)
+    if (areaFeedbackTimerRef.current) clearTimeout(areaFeedbackTimerRef.current);
+    areaFeedbackTimerRef.current = setTimeout(() => {
+      setAreaFeedback(null);
+    }, 4500); // ⏱️ más tiempo (ajústalo a gusto)
   };
+
 
   const downloadClassifierResults = () => {
     const csvData = [];
-    
+
     csvData.push(['Dato', 'Clasificación Asignada', 'Clasificación Correcta', 'Estado', 'Explicación']);
-    
+
     Object.entries(classifications).forEach(([category, cards]) => {
       cards.forEach(card => {
         const isCorrect = card.correct === category;
-        const categoryNames = {
-          nominal: 'Cualitativo Nominal',
-          ordinal: 'Cualitativo Ordinal',
-          discrete: 'Cuantitativo Discreto',
-          continuous: 'Cuantitativo Continuo'
-        };
-        
+
         csvData.push([
           card.text,
           categoryNames[category],
@@ -322,17 +376,17 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
         ]);
       });
     });
-    
+
     csvData.push([]);
     csvData.push(['RESUMEN']);
     csvData.push(['Puntuación Total', score]);
     csvData.push(['Intentos', attempts]);
     csvData.push(['Nivel de Dificultad', difficulty === 'basic' ? 'Básico' : difficulty === 'intermediate' ? 'Intermedio' : 'Avanzado']);
-    
-    const csvContent = csvData.map(row => 
+
+    const csvContent = csvData.map(row =>
       row.map(cell => `"${cell}"`).join(',')
     ).join('\n');
-    
+
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -347,11 +401,11 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
       alert('No hay datos analizados para exportar');
       return;
     }
-    
+
     const csvData = [];
-    
+
     csvData.push(['Columna', 'Tipo de Dato', 'Subtipo', 'Razonamiento', 'Valores Únicos', 'Total Registros', 'Ejemplos']);
-    
+
     analyzedColumns.forEach(col => {
       csvData.push([
         col.name,
@@ -363,14 +417,14 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
         col.examples.join('; ')
       ]);
     });
-    
+
     csvData.push([]);
     csvData.push(['RESUMEN DEL ANÁLISIS']);
     csvData.push(['Archivo', uploadedFile?.name || 'N/A']);
     csvData.push(['Total de Columnas', analyzedColumns.length]);
     csvData.push(['Total de Registros', fileData.length]);
     csvData.push(['Fecha de Análisis', new Date().toLocaleString('es-MX')]);
-    
+
     csvData.push([]);
     csvData.push(['DISTRIBUCIÓN POR TIPO DE DATO']);
     const typeCount = analyzedColumns.reduce((acc, col) => {
@@ -380,11 +434,11 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     Object.entries(typeCount).forEach(([type, count]) => {
       csvData.push([type, count]);
     });
-    
-    const csvContent = csvData.map(row => 
+
+    const csvContent = csvData.map(row =>
       row.map(cell => `"${cell}"`).join(',')
     ).join('\n');
-    
+
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -392,33 +446,6 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     link.download = `analisis_datos_${uploadedFile?.name.split('.')[0] || 'archivo'}_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  };
-
-  const checkAnswers = () => {
-    let correct = 0;
-    let total = 0;
-
-    Object.keys(classifications).forEach(category => {
-      classifications[category].forEach(card => {
-        total++;
-        if (card.correct === category) {
-          correct++;
-        }
-      });
-    });
-
-    setAttempts(attempts + 1);
-    setScore(score + correct);
-
-    if (correct === total && total > 0) {
-      setFeedbackMessage(`¡Perfecto! ${correct}/${total} correctas 🎉`);
-      setTimeout(() => {
-        generateNewRound();
-      }, 2000);
-    } else {
-      setFeedbackMessage(`${correct}/${total} correctas. Revisa los errores.`);
-    }
-    setShowFeedback(true);
   };
 
   const resetGame = () => {
@@ -429,7 +456,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
 
   const processFile = async (file) => {
     const extension = file.name.split('.').pop().toLowerCase();
-    
+
     if (extension === 'csv') {
       Papa.parse(file, {
         header: true,
@@ -452,6 +479,46 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     }
   };
 
+  // ✅ Funciones auxiliares para detectar ordinal
+  const looksOrdinalByValues = (valuesRaw) => {
+    const values = valuesRaw
+      .map(v => String(v).trim().toLowerCase())
+      .filter(Boolean);
+
+    const uniq = [...new Set(values)];
+
+    // patrones típicos ordinales
+    const orderedSets = [
+      ['bajo', 'medio', 'alto'],
+      ['muy bajo', 'bajo', 'medio', 'alto', 'muy alto'],
+      ['malo', 'regular', 'bueno'],
+      ['muy malo', 'malo', 'regular', 'bueno', 'muy bueno'],
+      ['primaria', 'secundaria', 'preparatoria', 'universidad'],
+      ['licenciatura', 'maestría', 'doctorado'],
+      ['s', 'm', 'l', 'xl'],
+      ['a', 'b', 'c', 'd', 'f'],
+      ['crítico', 'grave', 'estable', 'recuperado']
+    ];
+
+    const set = new Set(uniq);
+    const match = orderedSets.some(arr => arr.every(x => set.has(x)));
+
+    return match;
+  };
+
+  const looksLikertNumeric = (colName, numericUniques) => {
+    const name = (colName || '').toLowerCase();
+    const nameSuggestsLikert =
+      /likert|satisf|satisfaccion|calif|rating|evaluaci|opini|escala/i.test(name);
+
+    const uniq = [...new Set(numericUniques)].sort((a, b) => a - b);
+    const max = uniq[uniq.length - 1];
+    const min = uniq[0];
+
+    const smallScale = (min >= 0 && max <= 10 && uniq.length <= 10);
+    return nameSuggestsLikert && smallScale;
+  };
+
   const analyzeData = (data) => {
     setFileData(data);
     if (data.length === 0) return;
@@ -461,14 +528,29 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
       const values = data.map(row => row[col]).filter(v => v != null);
       const uniqueCount = new Set(values).size;
       const totalCount = values.length;
-      const numericValues = values.filter(v => typeof v === 'number' || !isNaN(parseFloat(v)));
-      
+
       let type = 'nominal';
       let subtype = '';
       let reasoning = '';
 
-      if (numericValues.length / totalCount > 0.8) {
-        const hasDecimals = numericValues.some(v => parseFloat(v) % 1 !== 0);
+      // ✅ ARREGLO PROBLEMA A: Detección numérica mejorada
+      const numericParsed = values
+        .map(v => (typeof v === 'number' ? v : Number(String(v).replace(',', '.'))))
+        .filter(v => Number.isFinite(v));
+
+      // Detectar si parece un ID
+      const looksLikeId = values.some(v => {
+        const s = String(v).trim();
+        // ceros a la izquierda ("001", "00023") o mezcla letras/números ("E001", "P001")
+        return (/^0\d+$/.test(s) || /[a-zA-Z]/.test(s));
+      });
+
+      const numericRatio = totalCount > 0 ? (numericParsed.length / totalCount) : 0;
+
+
+      // Solo considerar numérico si NO parece ID y tiene alta proporción numérica
+      if (!looksLikeId && numericRatio > 0.8) {
+        const hasDecimals = numericParsed.some(v => v % 1 !== 0);
         if (hasDecimals) {
           type = 'continuous';
           subtype = 'Cuantitativo Continuo';
@@ -479,14 +561,19 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
           reasoning = 'Contiene números enteros (conteos o cantidades discretas)';
         }
       } else {
-        if (uniqueCount <= 5) {
+        // ✅ Lógica cualitativa mejorada
+        const sampleValues = values.slice(0, 200);
+        const numericUniq = [...new Set(numericParsed)];
+
+        // ordinal SOLO si hay evidencia real
+        if (looksOrdinalByValues(sampleValues) || looksLikertNumeric(col, numericUniq)) {
           type = 'ordinal';
           subtype = 'Cualitativo Ordinal';
-          reasoning = 'Categorías con posible orden inherente';
+          reasoning = 'Categorías con orden claro (detectado por patrones comunes)';
         } else {
           type = 'nominal';
           subtype = 'Cualitativo Nominal';
-          reasoning = 'Categorías sin orden (etiquetas, nombres, clasificaciones)';
+          reasoning = 'Categorías sin orden inherente (nombres/etiquetas/identificadores)';
         }
       }
 
@@ -515,7 +602,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
   const handleDrop = (event) => {
     event.preventDefault();
     setIsDragging(false);
-    
+
     const file = event.dataTransfer.files?.[0];
     if (file) {
       setUploadedFile(file);
@@ -544,7 +631,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
   };
 
   const isCardPlaced = (cardId) => {
-    return Object.values(classifications).some(cat => 
+    return Object.values(classifications).some(cat =>
       cat.find(c => c.id === cardId)
     );
   };
@@ -553,25 +640,25 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/10 rounded-full blur-[150px] animate-pulse"></div>
-        <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '2s'}}></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '4s'}}></div>
+        <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '4s' }}></div>
       </div>
 
       <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <button
-            onClick={(e) => {
+              onClick={(e) => {
                 e.preventDefault();
                 if (goHome) goHome();
                 else if (setView) setView("home");
-                }}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
-                >
-                 <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                 Volver al Índice
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
+            >
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              Volver al Índice
             </button>
-            
+
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-xl relative overflow-hidden">
                 <div className="absolute inset-0 bg-white/10"></div>
@@ -582,7 +669,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                 <span className="font-black tracking-tight text-white block text-sm">Organización de Datos</span>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
               <span className="text-xs text-blue-400 font-black uppercase tracking-wider">Lab 2.1</span>
@@ -592,7 +679,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-8 relative">
-        
+
         <section className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 border-l-4 border-l-blue-500 relative overflow-hidden">
           <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
             <Target className="w-64 h-64 text-blue-400" />
@@ -618,44 +705,40 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
         <div className="flex gap-3 border-b border-white/10 pb-4 flex-wrap">
           <button
             onClick={() => setActiveTab('classifier')}
-            className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${
-              activeTab === 'classifier'
-                ? 'bg-blue-500 text-white'
-                : 'bg-white/5 hover:bg-white/10'
-            }`}
+            className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'classifier'
+              ? 'bg-blue-500 text-white'
+              : 'bg-white/5 hover:bg-white/10'
+              }`}
           >
             <Brain className="w-4 h-4 inline mr-2" />
             Clasificador Interactivo
           </button>
           <button
             onClick={() => setActiveTab('explorer')}
-            className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${
-              activeTab === 'explorer'
-                ? 'bg-blue-500 text-white'
-                : 'bg-white/5 hover:bg-white/10'
-            }`}
+            className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'explorer'
+              ? 'bg-blue-500 text-white'
+              : 'bg-white/5 hover:bg-white/10'
+              }`}
           >
             <FileSpreadsheet className="w-4 h-4 inline mr-2" />
             Explorador de Datos
           </button>
           <button
             onClick={() => setActiveTab('examples')}
-            className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${
-              activeTab === 'examples'
-                ? 'bg-blue-500 text-white'
-                : 'bg-white/5 hover:bg-white/10'
-            }`}
+            className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'examples'
+              ? 'bg-blue-500 text-white'
+              : 'bg-white/5 hover:bg-white/10'
+              }`}
           >
             <BookOpen className="w-4 h-4 inline mr-2" />
             Ejemplos por Área
           </button>
           <button
             onClick={() => setActiveTab('consequences')}
-            className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${
-              activeTab === 'consequences'
-                ? 'bg-blue-500 text-white'
-                : 'bg-white/5 hover:bg-white/10'
-            }`}
+            className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${activeTab === 'consequences'
+              ? 'bg-blue-500 text-white'
+              : 'bg-white/5 hover:bg-white/10'
+              }`}
           >
             <AlertCircle className="w-4 h-4 inline mr-2" />
             Consecuencias
@@ -669,7 +752,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                 <div>
                   <h3 className="text-2xl font-black text-white mb-2">Clasificador Interactivo</h3>
                   <p className="text-slate-400">
-                    <span className="font-bold text-blue-400">Paso 1:</span> Selecciona un dato de abajo → 
+                    <span className="font-bold text-blue-400">Paso 1:</span> Selecciona un dato de abajo →
                     <span className="font-bold text-purple-400 ml-2">Paso 2:</span> Haz clic en su categoría correcta
                   </p>
                 </div>
@@ -699,46 +782,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                {[
-                  { key: 'nominal', label: 'Cualitativo Nominal', desc: 'Sin orden', icon: '🏷️', borderColor: 'border-blue-500/30', hoverColor: 'hover:bg-blue-500/20' },
-                  { key: 'ordinal', label: 'Cualitativo Ordinal', desc: 'Con orden', icon: '📊', borderColor: 'border-purple-500/30', hoverColor: 'hover:bg-purple-500/20' },
-                  { key: 'discrete', label: 'Cuantitativo Discreto', desc: 'Números enteros', icon: '🔢', borderColor: 'border-green-500/30', hoverColor: 'hover:bg-green-500/20' },
-                  { key: 'continuous', label: 'Cuantitativo Continuo', desc: 'Decimales', icon: '📈', borderColor: 'border-orange-500/30', hoverColor: 'hover:bg-orange-500/20' }
-                ].map(category => (
-                  <button
-                    key={category.key}
-                    onClick={() => handleCategoryClick(category.key)}
-                    className={`bg-slate-950/50 border-2 ${category.borderColor} rounded-2xl p-4 min-h-[300px] text-left transition-all ${category.hoverColor} ${selectedCard ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
-                  >
-                    <div className="text-center mb-4 pointer-events-none">
-                      <div className="text-4xl mb-2">{category.icon}</div>
-                      <h4 className="font-black text-white text-sm mb-1">{category.label}</h4>
-                      <p className="text-xs text-slate-500">{category.desc}</p>
-                    </div>
-                    <div className="space-y-2 pointer-events-none">
-                      {classifications[category.key].map(card => (
-                        <div
-                          key={card.id}
-                          className={`p-3 rounded-xl border-2 transition-all ${
-                            showFeedback 
-                              ? (card.correct === category.key
-                                ? 'bg-green-500/20 border-green-500/50'
-                                : 'bg-red-500/20 border-red-500/50')
-                              : 'bg-slate-800/50 border-slate-700'
-                          }`}
-                        >
-                          <div className="font-bold text-sm text-white">{card.text}</div>
-                          {showFeedback && (
-                            <div className="text-xs text-slate-400 mt-1">{card.explanation}</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </button>
-                ))}
-              </div>
-
+              {/* Datos para clasificar PRIMERO */}
               <div className="bg-slate-950/50 rounded-2xl p-6 mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-bold text-white flex items-center gap-2">
@@ -763,15 +807,13 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                       <button
                         key={card.id}
                         onClick={() => handleCardSelect(card)}
-                        className={`p-4 rounded-xl transition-all border-2 ${
-                          isSelected
-                            ? 'bg-blue-500 border-blue-400 scale-105 shadow-xl shadow-blue-500/50'
-                            : 'bg-slate-800 hover:bg-slate-700 border-slate-600 hover:border-slate-500 hover:scale-105'
-                        }`}
+                        className={`p-4 rounded-xl transition-all border-2 ${isSelected
+                          ? 'bg-blue-500 border-blue-400 scale-105 shadow-xl shadow-blue-500/50'
+                          : 'bg-slate-800 hover:bg-slate-700 border-slate-600 hover:border-slate-500 hover:scale-105'
+                          }`}
                       >
-                        <div className={`font-bold text-center text-sm ${
-                          isSelected ? 'text-white' : 'text-slate-200'
-                        }`}>
+                        <div className={`font-bold text-center text-sm ${isSelected ? 'text-white' : 'text-slate-200'
+                          }`}>
                           {card.text}
                         </div>
                       </button>
@@ -785,38 +827,73 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                 )}
               </div>
 
+              {/* Categorías DESPUÉS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                {[
+                  { key: 'nominal', label: 'Cualitativo Nominal', desc: 'Sin orden', icon: '🏷️', borderColor: 'border-blue-500/30', hoverColor: 'hover:bg-blue-500/20' },
+                  { key: 'ordinal', label: 'Cualitativo Ordinal', desc: 'Con orden', icon: '📊', borderColor: 'border-purple-500/30', hoverColor: 'hover:bg-purple-500/20' },
+                  { key: 'discrete', label: 'Cuantitativo Discreto', desc: 'Números enteros', icon: '🔢', borderColor: 'border-green-500/30', hoverColor: 'hover:bg-green-500/20' },
+                  { key: 'continuous', label: 'Cuantitativo Continuo', desc: 'Decimales', icon: '📈', borderColor: 'border-orange-500/30', hoverColor: 'hover:bg-orange-500/20' }
+                ].map(category => (
+                  <button
+                    key={category.key}
+                    onClick={() => handleCategoryClick(category.key)}
+                    className={`bg-slate-950/50 border-2 ${category.borderColor} rounded-2xl p-4 min-h-[300px] text-left transition-all ${category.hoverColor} ${selectedCard ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+                  >
+                    <div className="text-center mb-4 pointer-events-none">
+                      <div className="text-4xl mb-2">{category.icon}</div>
+                      <h4 className="font-black text-white text-sm mb-1">{category.label}</h4>
+                      <p className="text-xs text-slate-500">{category.desc}</p>
+                    </div>
+                    <div className="space-y-2 pointer-events-none">
+                      {classifications[category.key].map(card => {
+                        const isCorrect = cardResults[card.id];
+                        return (
+                          <div
+                            key={card.id}
+                            className={`p-3 rounded-xl border-2 transition-all ${isCorrect !== undefined
+                              ? (isCorrect
+                                ? 'bg-green-500/20 border-green-500/50'
+                                : 'bg-red-500/20 border-red-500/50')
+                              : 'bg-slate-800/50 border-slate-700'
+                              }`}
+                          >
+                            <div className="font-bold text-sm text-white">{card.text}</div>
+                            {isCorrect !== undefined && !isCorrect && (
+                              <div className="text-xs text-slate-400 mt-1">{card.explanation}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Feedback instantáneo */}
+              {instantFeedback && (
+                <div className={`mt-4 p-4 rounded-2xl border-2 ${instantFeedback.ok ? 'bg-green-500/15 border-green-500/40' : 'bg-red-500/15 border-red-500/40'
+                  }`}>
+                  <div className="font-black text-white">
+                    {instantFeedback.ok ? '✅ Correcto' : '❌ Incorrecto'} — {instantFeedback.text}
+                  </div>
+                  {!instantFeedback.ok && (
+                    <div className="text-sm text-slate-300 mt-1">
+                      Tipo correcto: <span className="font-bold">{instantFeedback.correctLabel}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-4 flex-wrap">
                 <button
-                  onClick={checkAnswers}
-                  disabled={Object.values(classifications).every(cat => cat.length === 0)}
-                  className="flex-1 py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-black text-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <CheckCircle className="w-5 h-5 inline mr-2" />
-                  Verificar Respuestas
-                </button>
-                <button
                   onClick={generateNewRound}
-                  className="px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold transition-all"
+                  className="flex-1 px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold transition-all"
                 >
                   <Shuffle className="w-5 h-5 inline mr-2" />
                   Nuevos Datos
                 </button>
               </div>
-
-              {showFeedback && (
-                <div className={`mt-6 p-6 rounded-2xl border-2 ${
-                  feedbackMessage.includes('Perfecto') 
-                    ? 'bg-green-500/20 border-green-500/50' 
-                    : 'bg-yellow-500/20 border-yellow-500/50'
-                }`}>
-                  <div className="text-center">
-                    <div className="text-4xl mb-2">
-                      {feedbackMessage.includes('Perfecto') ? '🎉' : '💪'}
-                    </div>
-                    <div className="text-xl font-black text-white">{feedbackMessage}</div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -825,17 +902,16 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
           <div className="space-y-6">
             <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
               <h3 className="text-2xl font-black text-white mb-6">Explorador de Datos</h3>
-              
+
               {!uploadedFile ? (
                 <div
                   onDrop={handleDrop}
                   onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                   onDragLeave={() => setIsDragging(false)}
-                  className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer ${
-                    isDragging
-                      ? 'border-blue-500 bg-blue-500/10'
-                      : 'border-slate-700 hover:border-blue-500/50 hover:bg-slate-800/50'
-                  }`}
+                  className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer ${isDragging
+                    ? 'border-blue-500 bg-blue-500/10'
+                    : 'border-slate-700 hover:border-blue-500/50 hover:bg-slate-800/50'
+                    }`}
                 >
                   <Upload className="w-12 h-12 text-slate-500 mx-auto mb-4" />
                   <h4 className="text-lg font-bold text-white mb-2">Arrastra tu archivo aquí</h4>
@@ -862,7 +938,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                         <p className="text-sm text-slate-400">{fileData.length} registros</p>
                       </div>
                     </div>
-                    <button 
+                    <button
                       onClick={() => {
                         setUploadedFile(null);
                         setFileData([]);
@@ -886,7 +962,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                           Exportar Análisis (CSV)
                         </button>
                       </div>
-                      
+
                       {analyzedColumns.map((col, idx) => (
                         <div key={idx} className="bg-slate-950/50 rounded-2xl p-6 border border-white/10">
                           <div className="flex items-start justify-between mb-4">
@@ -904,7 +980,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                               <div className="text-2xl font-black text-white">{col.uniqueCount}</div>
                             </div>
                           </div>
-                          
+
                           <div className="bg-slate-900/50 p-4 rounded-xl mb-4">
                             <div className="text-xs text-slate-500 uppercase font-bold mb-2">Razón de Clasificación</div>
                             <p className="text-sm text-slate-300">{col.reasoning}</p>
@@ -955,21 +1031,20 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex gap-3 mb-6 flex-wrap">
                 {Object.entries(areaExamples).map(([key, area]) => {
                   const totalColumns = area.dataset.columns.filter(c => c.key !== 'id').length;
                   const classified = areaProgress[key] ? Object.keys(areaProgress[key]).length : 0;
-                  
+
                   return (
                     <button
                       key={key}
                       onClick={() => setSelectedArea(key)}
-                      className={`px-6 py-3 rounded-xl font-bold text-sm transition-all relative ${
-                        selectedArea === key
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-white/5 hover:bg-white/10'
-                      }`}
+                      className={`px-6 py-3 rounded-xl font-bold text-sm transition-all relative ${selectedArea === key
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-white/5 hover:bg-white/10'
+                        }`}
                     >
                       <span className="mr-2">{area.icon}</span>
                       {area.name}
@@ -987,7 +1062,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                 <h4 className="text-xl font-black text-white mb-4">
                   {areaExamples[selectedArea].icon} {areaExamples[selectedArea].dataset.name}
                 </h4>
-                
+
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse">
                     <thead>
@@ -996,22 +1071,21 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                           const progress = areaProgress[selectedArea]?.[col.key];
                           const isClassified = progress?.classified;
                           const isCorrect = progress?.correct;
-                          
+
                           return (
                             <th
                               key={col.key}
                               onClick={() => col.key !== 'id' && setSelectedColumn(col)}
-                              className={`p-4 text-left font-bold text-sm border-2 transition-all ${
-                                col.key === 'id' 
-                                  ? 'bg-slate-800/50 border-slate-700 cursor-not-allowed'
-                                  : selectedColumn?.key === col.key
+                              className={`p-4 text-left font-bold text-sm border-2 transition-all ${col.key === 'id'
+                                ? 'bg-slate-800/50 border-slate-700 cursor-not-allowed'
+                                : selectedColumn?.key === col.key
                                   ? 'bg-blue-500 border-blue-400 cursor-pointer'
                                   : isClassified
-                                  ? isCorrect
-                                    ? 'bg-green-500/20 border-green-500/50 cursor-pointer hover:bg-green-500/30'
-                                    : 'bg-red-500/20 border-red-500/50 cursor-pointer hover:bg-red-500/30'
-                                  : 'bg-slate-800/30 border-slate-700 cursor-pointer hover:bg-slate-700/50'
-                              }`}
+                                    ? isCorrect
+                                      ? 'bg-green-500/20 border-green-500/50 cursor-pointer hover:bg-green-500/30'
+                                      : 'bg-red-500/20 border-red-500/50 cursor-pointer hover:bg-red-500/30'
+                                    : 'bg-slate-800/30 border-slate-700 cursor-pointer hover:bg-slate-700/50'
+                                }`}
                             >
                               <div className="flex items-center justify-between">
                                 <span className="text-white">{col.name}</span>
@@ -1048,17 +1122,18 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                     <p className="text-sm text-slate-400 mb-4">
                       ¿Qué tipo de dato es esta columna?
                     </p>
+                    {/* ✅ ARREGLO PROBLEMA B: Clases Tailwind estáticas */}
                     <div className="grid grid-cols-2 gap-3">
                       {[
-                        { key: 'nominal', label: 'Cualitativo Nominal', icon: '🏷️', color: 'blue' },
-                        { key: 'ordinal', label: 'Cualitativo Ordinal', icon: '📊', color: 'purple' },
-                        { key: 'discrete', label: 'Cuantitativo Discreto', icon: '🔢', color: 'green' },
-                        { key: 'continuous', label: 'Cuantitativo Continuo', icon: '📈', color: 'orange' }
+                        { key: 'nominal', label: 'Cualitativo Nominal', icon: '🏷️', hoverClass: 'hover:border-blue-500' },
+                        { key: 'ordinal', label: 'Cualitativo Ordinal', icon: '📊', hoverClass: 'hover:border-purple-500' },
+                        { key: 'discrete', label: 'Cuantitativo Discreto', icon: '🔢', hoverClass: 'hover:border-green-500' },
+                        { key: 'continuous', label: 'Cuantitativo Continuo', icon: '📈', hoverClass: 'hover:border-orange-500' }
                       ].map((type) => (
                         <button
                           key={type.key}
                           onClick={() => handleColumnClassification(selectedColumn, type.key)}
-                          className={`p-4 bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 hover:border-${type.color}-500 rounded-xl transition-all text-left`}
+                          className={`p-4 bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 ${type.hoverClass} rounded-xl transition-all text-left`}
                         >
                           <div className="text-2xl mb-2">{type.icon}</div>
                           <div className="text-sm font-bold text-white">{type.label}</div>
@@ -1069,11 +1144,10 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                 )}
 
                 {areaProgress[selectedArea]?.[selectedColumn?.key]?.classified && (
-                  <div className={`mt-6 p-6 rounded-2xl border-2 ${
-                    areaProgress[selectedArea][selectedColumn.key].correct
-                      ? 'bg-green-500/20 border-green-500/50'
-                      : 'bg-red-500/20 border-red-500/50'
-                  }`}>
+                  <div className={`mt-6 p-6 rounded-2xl border-2 ${areaProgress[selectedArea][selectedColumn.key].correct
+                    ? 'bg-green-500/20 border-green-500/50'
+                    : 'bg-red-500/20 border-red-500/50'
+                    }`}>
                     <div className="flex items-start gap-4">
                       <div className="text-4xl">
                         {areaProgress[selectedArea][selectedColumn.key].correct ? '✅' : '❌'}
@@ -1086,9 +1160,9 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                           <div className="text-xs text-slate-500 uppercase font-bold mb-1">Tipo Correcto</div>
                           <div className={`text-lg font-bold bg-gradient-to-r ${getTypeColor(selectedColumn.type)} bg-clip-text text-transparent`}>
                             {selectedColumn.type === 'nominal' ? 'Cualitativo Nominal' :
-                             selectedColumn.type === 'ordinal' ? 'Cualitativo Ordinal' :
-                             selectedColumn.type === 'discrete' ? 'Cuantitativo Discreto' :
-                             'Cuantitativo Continuo'}
+                              selectedColumn.type === 'ordinal' ? 'Cualitativo Ordinal' :
+                                selectedColumn.type === 'discrete' ? 'Cuantitativo Discreto' :
+                                  'Cuantitativo Continuo'}
                           </div>
                         </div>
                         <div className="bg-slate-950/50 p-4 rounded-xl mb-3">
@@ -1121,11 +1195,10 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                   <button
                     key={scenario.id}
                     onClick={() => setComparisonScenario(scenario)}
-                    className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${
-                      comparisonScenario?.id === scenario.id
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-white/5 hover:bg-white/10'
-                    }`}
+                    className={`px-6 py-3 rounded-xl font-bold text-sm transition-all ${comparisonScenario?.id === scenario.id
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-white/5 hover:bg-white/10'
+                      }`}
                   >
                     {scenario.title}
                   </button>
@@ -1219,7 +1292,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
             <h3 className="text-2xl font-black text-white mb-2">Guía Rápida de Clasificación</h3>
             <p className="text-slate-400">Referencia visual de los tipos de datos y sus características</p>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 p-6 rounded-2xl border border-blue-500/20">
               <div className="flex items-start gap-4 mb-4">
@@ -1231,7 +1304,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                   </p>
                 </div>
               </div>
-              
+
               <div className="space-y-3">
                 <div className="bg-slate-950/50 p-4 rounded-xl">
                   <div className="font-bold text-white mb-1">📊 Nominales (sin orden)</div>
@@ -1258,7 +1331,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                   </p>
                 </div>
               </div>
-              
+
               <div className="space-y-3">
                 <div className="bg-slate-950/50 p-4 rounded-xl">
                   <div className="font-bold text-white mb-1">🎯 Discretos (contables)</div>
@@ -1282,7 +1355,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
               <div>
                 <h4 className="font-black text-white mb-2">💡 Consejo Clave</h4>
                 <p className="text-slate-300 text-sm leading-relaxed">
-                  La clasificación correcta determina qué estadísticas calcular (media, moda, mediana) y qué visualizaciones usar (barras, pastel, histograma). 
+                  La clasificación correcta determina qué estadísticas calcular (media, moda, mediana) y qué visualizaciones usar (barras, pastel, histograma).
                   <strong className="text-purple-400"> Un código postal puede parecer numérico, pero es categórico nominal</strong> porque los números son solo etiquetas sin significado matemático.
                 </p>
               </div>
