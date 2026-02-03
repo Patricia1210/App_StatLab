@@ -35,6 +35,10 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
   const [cardResults, setCardResults] = useState({});
   const [areaFeedback, setAreaFeedback] = useState(null);
   const areaFeedbackTimerRef = useRef(null);
+  const [roundFinished, setRoundFinished] = useState(false);
+  const [roundStats, setRoundStats] = useState({ correct: 0, total: 0 });
+  const [pool, setPool] = useState([]);
+  const [poolIndex, setPoolIndex] = useState(0);
 
 
   const dataExamples = {
@@ -241,15 +245,37 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     }
   ];
 
+  const getNumCards = () => (difficulty === 'basic' ? 4 : difficulty === 'intermediate' ? 6 : 8);
+
   useEffect(() => {
-    generateNewRound();
+    return () => {
+      if (areaFeedbackTimerRef.current) clearTimeout(areaFeedbackTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const examples = [...dataExamples[difficulty]].sort(() => Math.random() - 0.5);
+    setPool(examples);
+    setPoolIndex(0);
+    setScore(0);
+    setAttempts(0);
+    generateNewRoundFromPool(examples, 0);
   }, [difficulty]);
 
-  const generateNewRound = () => {
-    const examples = dataExamples[difficulty];
-    const shuffled = [...examples].sort(() => Math.random() - 0.5);
-    const numCards = difficulty === 'basic' ? 4 : difficulty === 'intermediate' ? 6 : 8;
-    const selected = shuffled.slice(0, numCards);
+  const generateNewRoundFromPool = (poolArr = pool, startIndex = poolIndex) => {
+    const numCards = getNumCards();
+    let idx = startIndex;
+    let nextPool = poolArr;
+
+    if (idx + numCards > poolArr.length) {
+      nextPool = [...dataExamples[difficulty]].sort(() => Math.random() - 0.5);
+      idx = 0;
+      setPool(nextPool);
+    }
+
+    const selected = nextPool.slice(idx, idx + numCards);
+    setPoolIndex(idx + numCards);
+
     setCurrentCards(selected);
     setClassifications({
       nominal: [],
@@ -261,6 +287,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     setSelectedCard(null);
     setInstantFeedback(null);
     setCardResults({});
+    setRoundFinished(false);
   };
 
   const handleCardSelect = (card) => {
@@ -280,7 +307,6 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
       return;
     }
 
-    // mover la tarjeta a la categoría elegida
     const newClassifications = { ...classifications };
     Object.keys(newClassifications).forEach(key => {
       newClassifications[key] = newClassifications[key].filter(c => c.id !== selectedCard.id);
@@ -288,16 +314,15 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     newClassifications[category].push(selectedCard);
     setClassifications(newClassifications);
 
-    // ✅ calificación inmediata
     const ok = selectedCard.correct === category;
     setAttempts(a => a + 1);
     setScore(s => s + (ok ? 1 : 0));
 
-    // ✅ Guardar resultado por tarjeta
-    setCardResults(prev => ({
-      ...prev,
+    const nextCardResults = {
+      ...cardResults,
       [selectedCard.id]: ok
-    }));
+    };
+    setCardResults(nextCardResults);
 
     setInstantFeedback({
       ok,
@@ -306,21 +331,19 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
       correctLabel: categoryNames[selectedCard.correct]
     });
 
-    // limpiar selección
     setSelectedCard(null);
 
-    // ocultar feedback
     setTimeout(() => setInstantFeedback(null), 1400);
 
-    // ✅ si ya clasificó todo, nueva ronda automática
     const allPlacedAfter = currentCards.every(c =>
       Object.values(newClassifications).some(arr => arr.some(x => x.id === c.id))
     );
 
     if (allPlacedAfter) {
-      setTimeout(() => {
-        generateNewRound();
-      }, 900);
+      const total = currentCards.length;
+      const correct = currentCards.reduce((acc, c) => acc + (nextCardResults[c.id] ? 1 : 0), 0);
+      setRoundStats({ correct, total });
+      setRoundFinished(true);
     }
   };
 
@@ -340,21 +363,18 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
 
     if (isCorrect) setAreaScore(s => s + 10);
 
-    // ✅ Feedback independiente y MUY visible
     setAreaFeedback({
       column,
       isCorrect,
       selectedType,
-      // para mostrar el área actual (por si cambian rápido de pestaña)
       areaKey: selectedArea,
       ts: Date.now()
     });
 
-    // ✅ Reset de timer (evita que se “corte” si contestan rápido varias)
     if (areaFeedbackTimerRef.current) clearTimeout(areaFeedbackTimerRef.current);
     areaFeedbackTimerRef.current = setTimeout(() => {
       setAreaFeedback(null);
-    }, 4500); // ⏱️ más tiempo (ajústalo a gusto)
+    }, 4500);
   };
 
 
@@ -384,7 +404,10 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     csvData.push(['Nivel de Dificultad', difficulty === 'basic' ? 'Básico' : difficulty === 'intermediate' ? 'Intermedio' : 'Avanzado']);
 
     const csvContent = csvData.map(row =>
-      row.map(cell => `"${cell}"`).join(',')
+      row.map(cell => {
+        const s = String(cell ?? '');
+        return `"${s.replace(/"/g, '""')}"`;
+      }).join(',')
     ).join('\n');
 
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -436,7 +459,10 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     });
 
     const csvContent = csvData.map(row =>
-      row.map(cell => `"${cell}"`).join(',')
+      row.map(cell => {
+        const s = String(cell ?? '');
+        return `"${s.replace(/"/g, '""')}"`;
+      }).join(',')
     ).join('\n');
 
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -451,7 +477,10 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
   const resetGame = () => {
     setScore(0);
     setAttempts(0);
-    generateNewRound();
+    const examples = [...dataExamples[difficulty]].sort(() => Math.random() - 0.5);
+    setPool(examples);
+    setPoolIndex(0);
+    generateNewRoundFromPool(examples, 0);
   };
 
   const processFile = async (file) => {
@@ -462,24 +491,28 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
         header: true,
         dynamicTyping: true,
         skipEmptyLines: true,
-        complete: (results) => {
-          analyzeData(results.data);
-        }
+        complete: (results) => analyzeData(results.data),
+        error: () => alert('No se pudo leer el CSV. Verifica el formato.')
       });
+
     } else if (extension === 'xlsx' || extension === 'xls') {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-        analyzeData(jsonData);
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+          analyzeData(jsonData);
+        } catch (err) {
+          alert('No se pudo leer el Excel. Verifica que no esté dañado.');
+        }
       };
       reader.readAsArrayBuffer(file);
     }
+
   };
 
-  // ✅ Funciones auxiliares para detectar ordinal
   const looksOrdinalByValues = (valuesRaw) => {
     const values = valuesRaw
       .map(v => String(v).trim().toLowerCase())
@@ -487,7 +520,6 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
 
     const uniq = [...new Set(values)];
 
-    // patrones típicos ordinales
     const orderedSets = [
       ['bajo', 'medio', 'alto'],
       ['muy bajo', 'bajo', 'medio', 'alto', 'muy alto'],
@@ -533,22 +565,18 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
       let subtype = '';
       let reasoning = '';
 
-      // ✅ ARREGLO PROBLEMA A: Detección numérica mejorada
       const numericParsed = values
         .map(v => (typeof v === 'number' ? v : Number(String(v).replace(',', '.'))))
         .filter(v => Number.isFinite(v));
 
-      // Detectar si parece un ID
       const looksLikeId = values.some(v => {
         const s = String(v).trim();
-        // ceros a la izquierda ("001", "00023") o mezcla letras/números ("E001", "P001")
         return (/^0\d+$/.test(s) || /[a-zA-Z]/.test(s));
       });
 
       const numericRatio = totalCount > 0 ? (numericParsed.length / totalCount) : 0;
 
 
-      // Solo considerar numérico si NO parece ID y tiene alta proporción numérica
       if (!looksLikeId && numericRatio > 0.8) {
         const hasDecimals = numericParsed.some(v => v % 1 !== 0);
         if (hasDecimals) {
@@ -561,11 +589,9 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
           reasoning = 'Contiene números enteros (conteos o cantidades discretas)';
         }
       } else {
-        // ✅ Lógica cualitativa mejorada
         const sampleValues = values.slice(0, 200);
         const numericUniq = [...new Set(numericParsed)];
 
-        // ordinal SOLO si hay evidencia real
         if (looksOrdinalByValues(sampleValues) || looksLikertNumeric(col, numericUniq)) {
           type = 'ordinal';
           subtype = 'Cualitativo Ordinal';
@@ -593,11 +619,17 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
 
   const handleFileUpload = (event) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setUploadedFile(file);
-      processFile(file);
-    }
+    if (!file) return;
+
+    setUploadedFile(file);
+    setFileData([]);
+    setAnalyzedColumns([]);
+    processFile(file);
+
+    // ✅ permite volver a seleccionar el mismo archivo
+    event.target.value = '';
   };
+
 
   const handleDrop = (event) => {
     event.preventDefault();
@@ -606,6 +638,8 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
     const file = event.dataTransfer.files?.[0];
     if (file) {
       setUploadedFile(file);
+      setFileData([]);
+      setAnalyzedColumns([]);
       processFile(file);
     }
   };
@@ -635,6 +669,12 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
       cat.find(c => c.id === cardId)
     );
   };
+
+  // Calcular progreso
+  const placedCount = currentCards.filter(c => isCardPlaced(c.id)).length;
+  const totalCount = currentCards.length;
+  const correctCount = currentCards.reduce((acc, c) => acc + (cardResults[c.id] ? 1 : 0), 0);
+  const wrongCount = placedCount - correctCount;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -748,21 +788,28 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
         {activeTab === 'classifier' && (
           <div className="space-y-6">
             <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
-              <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-                <div>
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+                {/* IZQUIERDA: título + instrucción */}
+                <div className="min-w-0 lg:flex-1">
                   <h3 className="text-2xl font-black text-white mb-2">Clasificador Interactivo</h3>
                   <p className="text-slate-400">
                     <span className="font-bold text-blue-400">Paso 1:</span> Selecciona un dato de abajo →
                     <span className="font-bold text-purple-400 ml-2">Paso 2:</span> Haz clic en su categoría correcta
                   </p>
                 </div>
-                <div className="flex items-center gap-4 flex-wrap">
+
+                {/* DERECHA: panel y controles (se quedan a la derecha en desktop) */}
+                <div className="flex flex-wrap lg:flex-nowrap items-center gap-3 lg:ml-auto shrink-0">
                   <div className="text-center px-6 py-3 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl border border-blue-500/30">
-                    <div className="text-xs text-slate-400 uppercase font-bold">Puntuación</div>
+                    <div className="text-xs text-slate-400 uppercase font-bold">Progreso</div>
                     <div className="text-3xl font-black bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                      {score}
+                      {placedCount}/{totalCount}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-400">
+                      ✅ {correctCount} · ❌ {wrongCount}
                     </div>
                   </div>
+
                   <select
                     value={difficulty}
                     onChange={(e) => setDifficulty(e.target.value)}
@@ -772,6 +819,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                     <option value="intermediate">Intermedio</option>
                     <option value="advanced">Avanzado</option>
                   </select>
+
                   <button
                     onClick={resetGame}
                     className="px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold text-sm"
@@ -779,10 +827,16 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                     <Shuffle className="w-4 h-4 inline mr-2" />
                     Reiniciar
                   </button>
+
+                  <button
+                    onClick={downloadClassifierResults}
+                    className="px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold text-sm"
+                  >
+                    <Download className="w-4 h-4 inline mr-2" />
+                    Exportar Resultados
+                  </button>
                 </div>
               </div>
-
-              {/* Datos para clasificar PRIMERO */}
               <div className="bg-slate-950/50 rounded-2xl p-6 mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="font-bold text-white flex items-center gap-2">
@@ -827,7 +881,6 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                 )}
               </div>
 
-              {/* Categorías DESPUÉS */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 {[
                   { key: 'nominal', label: 'Cualitativo Nominal', desc: 'Sin orden', icon: '🏷️', borderColor: 'border-blue-500/30', hoverColor: 'hover:bg-blue-500/20' },
@@ -870,7 +923,6 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                 ))}
               </div>
 
-              {/* Feedback instantáneo */}
               {instantFeedback && (
                 <div className={`mt-4 p-4 rounded-2xl border-2 ${instantFeedback.ok ? 'bg-green-500/15 border-green-500/40' : 'bg-red-500/15 border-red-500/40'
                   }`}>
@@ -885,13 +937,31 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                 </div>
               )}
 
-              <div className="flex gap-4 flex-wrap">
+              {roundFinished && (
+                <div className="mt-6 p-5 rounded-2xl border border-green-500/30 bg-green-500/10">
+                  <div className="font-black text-white text-lg">✅ Ronda completada</div>
+                  <div className="text-slate-300 text-sm mt-1">
+                    Resultado: <span className="font-bold text-green-300">{roundStats.correct}/{roundStats.total}</span>
+                    {' '}— Presiona <span className="font-bold">"Nuevos Datos"</span> para continuar.
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-4 flex-wrap mt-6">
                 <button
-                  onClick={generateNewRound}
-                  className="flex-1 px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold transition-all"
+                  onClick={() => {
+                    if (!roundFinished) return;
+                    generateNewRoundFromPool();
+                  }}
+                  disabled={!roundFinished}
+                  className={`flex-1 px-6 py-4 rounded-xl font-bold transition-all border
+                    ${roundFinished
+                      ? 'bg-white/5 hover:bg-white/10 border-white/10'
+                      : 'bg-slate-800/40 border-slate-700/50 opacity-60 cursor-not-allowed'
+                    }`}
                 >
                   <Shuffle className="w-5 h-5 inline mr-2" />
-                  Nuevos Datos
+                  {roundFinished ? 'Nuevos Datos' : 'Termina la ronda para continuar'}
                 </button>
               </div>
             </div>
@@ -1075,7 +1145,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                           return (
                             <th
                               key={col.key}
-                              onClick={() => col.key !== 'id' && setSelectedColumn(col)}
+                              onClick={() => { setSelectedArea(key); setSelectedColumn(null); }}
                               className={`p-4 text-left font-bold text-sm border-2 transition-all ${col.key === 'id'
                                 ? 'bg-slate-800/50 border-slate-700 cursor-not-allowed'
                                 : selectedColumn?.key === col.key
@@ -1122,18 +1192,17 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                     <p className="text-sm text-slate-400 mb-4">
                       ¿Qué tipo de dato es esta columna?
                     </p>
-                    {/* ✅ ARREGLO PROBLEMA B: Clases Tailwind estáticas */}
                     <div className="grid grid-cols-2 gap-3">
                       {[
-                        { key: 'nominal', label: 'Cualitativo Nominal', icon: '🏷️', hoverClass: 'hover:border-blue-500' },
-                        { key: 'ordinal', label: 'Cualitativo Ordinal', icon: '📊', hoverClass: 'hover:border-purple-500' },
-                        { key: 'discrete', label: 'Cuantitativo Discreto', icon: '🔢', hoverClass: 'hover:border-green-500' },
-                        { key: 'continuous', label: 'Cuantitativo Continuo', icon: '📈', hoverClass: 'hover:border-orange-500' }
+                        { key: 'nominal', label: 'Cualitativo Nominal', icon: '🏷️' },
+                        { key: 'ordinal', label: 'Cualitativo Ordinal', icon: '📊' },
+                        { key: 'discrete', label: 'Cuantitativo Discreto', icon: '🔢' },
+                        { key: 'continuous', label: 'Cuantitativo Continuo', icon: '📈' }
                       ].map((type) => (
                         <button
                           key={type.key}
                           onClick={() => handleColumnClassification(selectedColumn, type.key)}
-                          className={`p-4 bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 ${type.hoverClass} rounded-xl transition-all text-left`}
+                          className="p-4 bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 hover:border-blue-500 rounded-xl transition-all text-left"
                         >
                           <div className="text-2xl mb-2">{type.icon}</div>
                           <div className="text-sm font-bold text-white">{type.label}</div>
