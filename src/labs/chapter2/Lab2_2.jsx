@@ -16,12 +16,17 @@ import Papa from "papaparse";
 
 const Lab2_2 = ({ goHome, setView }) => {
   const [activeTab, setActiveTab] = useState('basicos');
-  const [selectedDataset, setSelectedDataset] = useState('colores');
+  const [selectedDataset, setSelectedDataset] = useState('');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [uploadedData, setUploadedData] = useState([]);
   const [uploadedColumns, setUploadedColumns] = useState([]);
   const [showTable, setShowTable] = useState(false);
   const chartRef = useRef(null);
+
+  // ============================================
+  // NUEVO: Key única para forzar remontaje del gráfico
+  // ============================================
+  const [chartKey, setChartKey] = useState(0);
 
   const [config, setConfig] = useState({
     chartType: 'bar',
@@ -188,16 +193,49 @@ const Lab2_2 = ({ goHome, setView }) => {
     slate: { name: "Pizarra", color: "#f1f5f9" }
   };
 
-  // Auto-generar título
+  // ============================================
+  // NUEVO: RESET COMPLETO AL CAMBIAR DE PESTAÑA
+  // ============================================
   useEffect(() => {
-    if (!config.chartTitle) {
+    // Resetear todos los estados
+    setSelectedDataset('');
+    setUploadedFile(null);
+    setUploadedData([]);
+    setUploadedColumns([]);
+    setShowTable(false);
+
+    // Resetear configuración a valores por defecto
+    setConfig({
+      chartType: 'bar',
+      showPercentage: false,
+      sortOrder: 'none',
+      colorPalette: 'modern',
+      selectedVariable: '',
+      selectedVariable2: '',
+      variableMode: '1var',
+      showGrid: true,
+      showValues: true,
+      backgroundColor: 'white',
+      chartTitle: '',
+      xAxisLabel: '',
+      yAxisLabel: 'Frecuencia',
+      pieType: 'pie'
+    });
+
+    // Incrementar key para forzar remontaje del gráfico
+    setChartKey(prev => prev + 1);
+  }, [activeTab]);
+
+  // Auto-generar título (solo cuando hay datos)
+  useEffect(() => {
+    if (!config.chartTitle && (selectedDataset || config.selectedVariable)) {
       if (activeTab === 'upload' && config.selectedVariable) {
         setConfig(prev => ({
           ...prev,
-          chartTitle: config.variableMode === '2var' && config.selectedVariable2
-            ? `${config.selectedVariable} por ${config.selectedVariable2}`
-            : `Distribución de ${config.selectedVariable}`,
-          xAxisLabel: config.variableMode === '2var' && config.selectedVariable2 ? config.selectedVariable2 : config.selectedVariable
+          chartTitle: prev.variableMode === '2var' && prev.selectedVariable2
+            ? `${prev.selectedVariable} por ${prev.selectedVariable2}`
+            : `Distribución de ${prev.selectedVariable}`,
+          xAxisLabel: prev.variableMode === '2var' && prev.selectedVariable2 ? prev.selectedVariable2 : prev.selectedVariable
         }));
       } else if (activeTab === 'avanzados' && advancedDatasets[selectedDataset]) {
         setConfig(prev => ({
@@ -213,7 +251,7 @@ const Lab2_2 = ({ goHome, setView }) => {
         }));
       }
     }
-  }, [selectedDataset, config.selectedVariable, config.selectedVariable2, config.variableMode, activeTab]);
+  }, [selectedDataset, config.selectedVariable, config.selectedVariable2, config.variableMode, activeTab, config.chartTitle]);
 
   // Actualizar yAxisLabel
   useEffect(() => {
@@ -226,7 +264,7 @@ const Lab2_2 = ({ goHome, setView }) => {
     }));
   }, [config.showPercentage, config.chartType]);
 
-  // Función para datos de Pareto
+  // Función para datos de Pareto (SIN CAMBIOS - MANTENER EXACTAMENTE IGUAL)
   const getParetoData = (chartDataRaw) => {
     if (!chartDataRaw || chartDataRaw.length === 0) return [];
 
@@ -351,7 +389,10 @@ const Lab2_2 = ({ goHome, setView }) => {
         const var1 = row[config.selectedVariable];
         const var2 = row[config.selectedVariable2];
 
-        if (var1 && var2) {
+        const ok1 = var1 !== null && var1 !== undefined && var1 !== '';
+        const ok2 = var2 !== null && var2 !== undefined && var2 !== '';
+
+        if (ok1 && ok2) {
           if (!contingency[var2]) contingency[var2] = {};
           contingency[var2][var1] = (contingency[var2][var1] || 0) + 1;
           categories.add(var1);
@@ -534,7 +575,11 @@ const Lab2_2 = ({ goHome, setView }) => {
             {data.map((item, idx) => {
               const freq = Number(item.frecuencia ?? item.value ?? 0);
               const percentage = ((freq / total) * 100).toFixed(1);
-              const accumulated = data.slice(0, idx + 1).reduce((sum, d) => sum + Number(d.frecuencia ?? d.value ?? 0), 0);
+
+              const accumulated = data
+                .slice(0, idx + 1)
+                .reduce((sum, d) => sum + Number(d.frecuencia ?? d.value ?? 0), 0);
+
               const accPercentage = ((accumulated / total) * 100).toFixed(1);
 
               return (
@@ -557,6 +602,12 @@ const Lab2_2 = ({ goHome, setView }) => {
       </div>
     );
   };
+
+  // ========================================
+  // CONTINÚA EN PARTE 2
+  // ========================================// ========================================
+  // CONTINUACIÓN DESDE PARTE 1
+  // ========================================
 
   const renderChart = () => {
     const chartData = getChartData();
@@ -590,16 +641,22 @@ const Lab2_2 = ({ goHome, setView }) => {
       const { rows, cols, counts, max } = m;
 
       return (
-        <div ref={chartRef} style={{ backgroundColor: bgColor }} className="rounded-xl p-6">
+        <div key={chartKey} ref={chartRef} style={{ backgroundColor: bgColor }} className="rounded-xl p-6">
           {config.chartTitle && (
-            <h3 className="text-center font-bold text-lg mb-4" style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}>
+            <h3
+              className="text-center font-bold text-lg mb-4"
+              style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}
+            >
               {config.chartTitle}
             </h3>
           )}
 
           <div className="overflow-x-auto">
             <div className="min-w-[700px]">
-              <div className="grid" style={{ gridTemplateColumns: `220px repeat(${cols.length}, minmax(70px, 1fr))` }}>
+              <div
+                className="grid"
+                style={{ gridTemplateColumns: `220px repeat(${cols.length}, minmax(70px, 1fr))` }}
+              >
                 <div className="p-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
                   {config.selectedVariable} \ {config.selectedVariable2}
                 </div>
@@ -623,7 +680,7 @@ const Lab2_2 = ({ goHome, setView }) => {
 
                       return (
                         <div
-                          key={cl}
+                          key={`${rw}__${cl}`}
                           className="m-1 rounded-lg border border-white/10 flex items-center justify-center h-12"
                           style={{ backgroundColor: `rgba(59,130,246,${alpha})` }}
                           title={`${rw} / ${cl}: ${v}`}
@@ -646,8 +703,10 @@ const Lab2_2 = ({ goHome, setView }) => {
     }
 
     // Gráficos avanzados (agrupado/apilado/stacked100)
-    if ((activeTab === 'avanzados' && advancedDatasets[selectedDataset]) ||
-      (activeTab === 'upload' && config.variableMode === '2var' && config.chartType !== 'heatmap')) {
+    if (
+      (activeTab === 'avanzados' && advancedDatasets[selectedDataset]) ||
+      (activeTab === 'upload' && config.variableMode === '2var' && config.chartType !== 'heatmap')
+    ) {
       const dataset = activeTab === 'avanzados'
         ? advancedDatasets[selectedDataset]
         : {
@@ -655,23 +714,32 @@ const Lab2_2 = ({ goHome, setView }) => {
           type: config.chartType === 'stacked' || config.chartType === 'stacked100' ? 'stacked' : 'grouped'
         };
 
-      const isStacked = dataset.type === 'stacked' || config.chartType === 'stacked' || config.chartType === 'stacked100';
+      const isStacked =
+        dataset.type === 'stacked' ||
+        config.chartType === 'stacked' ||
+        config.chartType === 'stacked100';
+
       const xKey = activeTab === 'avanzados'
         ? (dataset.name.includes("Pingüinos") ? "isla" : "dia")
         : config.selectedVariable2;
 
       return (
-        <div ref={chartRef} style={{ backgroundColor: bgColor }} className="rounded-xl p-6">
+        <div key={chartKey} ref={chartRef} style={{ backgroundColor: bgColor }} className="rounded-xl p-6">
           {config.chartTitle && (
-            <h3 className="text-center font-bold text-lg mb-4" style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}>
+            <h3
+              className="text-center font-bold text-lg mb-4"
+              style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}
+            >
               {config.chartTitle}
             </h3>
           )}
+
           <ResponsiveContainer width="100%" height={450}>
             <BarChart data={chartData} margin={{ top: 20, right: 30, left: 60, bottom: 80 }}>
               {config.showGrid && (
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
               )}
+
               <XAxis
                 dataKey={xKey}
                 angle={-30}
@@ -690,6 +758,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                   />
                 )}
               </XAxis>
+
               <YAxis
                 tick={{ fill: textColor, fontSize: 11, fontWeight: 500 }}
                 axisLine={false}
@@ -700,19 +769,30 @@ const Lab2_2 = ({ goHome, setView }) => {
                     value={config.yAxisLabel}
                     angle={-90}
                     position="insideLeft"
-                    style={{ fill: isLight ? '#1e293b' : '#cbd5e1', fontWeight: 700, fontSize: 12, textAnchor: 'middle' }}
+                    style={{
+                      fill: isLight ? '#1e293b' : '#cbd5e1',
+                      fontWeight: 700,
+                      fontSize: 12,
+                      textAnchor: 'middle'
+                    }}
                   />
                 )}
               </YAxis>
+
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="circle" />
+
               {dataset.categories.map((cat, idx) => (
                 <Bar
                   key={cat}
                   dataKey={cat}
                   fill={currentColors[idx % currentColors.length]}
                   stackId={isStacked ? "a" : undefined}
-                  radius={isStacked ? (idx === dataset.categories.length - 1 ? [8, 8, 0, 0] : [0, 0, 0, 0]) : [8, 8, 0, 0]}
+                  radius={
+                    isStacked
+                      ? (idx === dataset.categories.length - 1 ? [8, 8, 0, 0] : [0, 0, 0, 0])
+                      : [8, 8, 0, 0]
+                  }
                 />
               ))}
             </BarChart>
@@ -723,18 +803,23 @@ const Lab2_2 = ({ goHome, setView }) => {
 
     // Gráficos simples (bar/pareto/pie/donut)
     return (
-      <div ref={chartRef} style={{ backgroundColor: bgColor }} className="rounded-xl p-6">
+      <div key={chartKey} ref={chartRef} style={{ backgroundColor: bgColor }} className="rounded-xl p-6">
         {config.chartTitle && (
-          <h3 className="text-center font-bold text-lg mb-4" style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}>
+          <h3
+            className="text-center font-bold text-lg mb-4"
+            style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}
+          >
             {config.chartTitle}
           </h3>
         )}
+
         <ResponsiveContainer width="100%" height={450}>
           {config.chartType === 'bar' ? (
             <BarChart data={chartData} margin={{ top: 20, right: 30, left: 60, bottom: 80 }}>
               {config.showGrid && (
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
               )}
+
               <XAxis
                 dataKey="categoria"
                 angle={-30}
@@ -753,6 +838,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                   />
                 )}
               </XAxis>
+
               <YAxis
                 tick={{ fill: textColor, fontSize: 11, fontWeight: 500 }}
                 axisLine={false}
@@ -763,11 +849,18 @@ const Lab2_2 = ({ goHome, setView }) => {
                     value={config.yAxisLabel}
                     angle={-90}
                     position="insideLeft"
-                    style={{ fill: isLight ? '#1e293b' : '#cbd5e1', fontWeight: 700, fontSize: 12, textAnchor: 'middle' }}
+                    style={{
+                      fill: isLight ? '#1e293b' : '#cbd5e1',
+                      fontWeight: 700,
+                      fontSize: 12,
+                      textAnchor: 'middle'
+                    }}
                   />
                 )}
               </YAxis>
+
               <Tooltip content={<CustomTooltip />} />
+
               <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={60}>
                 {chartData.map((_, idx) => (
                   <Cell key={idx} fill={currentColors[idx % currentColors.length]} />
@@ -777,6 +870,7 @@ const Lab2_2 = ({ goHome, setView }) => {
           ) : config.chartType === 'pareto' ? (
             (() => {
               const paretoData = getParetoData(chartData);
+
               return (
                 <ComposedChart data={paretoData} margin={{ top: 20, right: 60, left: 60, bottom: 80 }}>
                   {config.showGrid && (
@@ -812,7 +906,12 @@ const Lab2_2 = ({ goHome, setView }) => {
                       value="Frecuencia"
                       angle={-90}
                       position="insideLeft"
-                      style={{ fill: isLight ? '#1e293b' : '#cbd5e1', fontWeight: 700, fontSize: 12, textAnchor: 'middle' }}
+                      style={{
+                        fill: isLight ? '#1e293b' : '#cbd5e1',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        textAnchor: 'middle'
+                      }}
                     />
                   </YAxis>
 
@@ -828,14 +927,25 @@ const Lab2_2 = ({ goHome, setView }) => {
                       value="% Acumulado"
                       angle={-90}
                       position="insideRight"
-                      style={{ fill: isLight ? '#1e293b' : '#cbd5e1', fontWeight: 700, fontSize: 12, textAnchor: 'middle' }}
+                      style={{
+                        fill: isLight ? '#1e293b' : '#cbd5e1',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        textAnchor: 'middle'
+                      }}
                     />
                   </YAxis>
 
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="circle" />
 
-                  <Bar yAxisId="left" dataKey="frecuencia" name="Frecuencia" radius={[8, 8, 0, 0]} maxBarSize={60}>
+                  <Bar
+                    yAxisId="left"
+                    dataKey="frecuencia"
+                    name="Frecuencia"
+                    radius={[8, 8, 0, 0]}
+                    maxBarSize={60}
+                  >
                     {paretoData.map((_, idx) => (
                       <Cell key={idx} fill={currentColors[idx % currentColors.length]} />
                     ))}
@@ -864,12 +974,13 @@ const Lab2_2 = ({ goHome, setView }) => {
                 innerRadius={config.pieType === 'donut' ? 80 : 0}
                 outerRadius={140}
                 label={(entry) => `${entry.categoria}: ${entry.value}${config.showPercentage ? '%' : ''}`}
-                labelLine={true}
+                labelLine
               >
                 {chartData.map((_, idx) => (
                   <Cell key={idx} fill={currentColors[idx % currentColors.length]} />
                 ))}
               </Pie>
+
               <Tooltip content={<CustomTooltip />} />
               <Legend verticalAlign="bottom" height={36} />
             </RechartsPieChart>
@@ -886,8 +997,14 @@ const Lab2_2 = ({ goHome, setView }) => {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-blue-500/10 rounded-full blur-[150px] animate-pulse"></div>
-        <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '4s' }}></div>
+        <div
+          className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse"
+          style={{ animationDelay: '2s' }}
+        ></div>
+        <div
+          className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse"
+          style={{ animationDelay: '4s' }}
+        ></div>
       </div>
 
       <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
@@ -910,8 +1027,12 @@ const Lab2_2 = ({ goHome, setView }) => {
                 <BarChart3 className="w-7 h-7 text-white relative z-10" />
               </div>
               <div>
-                <span className="text-xs text-blue-400 font-bold block uppercase tracking-wider">Capítulo 2</span>
-                <span className="font-black tracking-tight text-white block text-sm">Organización de Datos</span>
+                <span className="text-xs text-blue-400 font-bold block uppercase tracking-wider">
+                  Capítulo 2
+                </span>
+                <span className="font-black tracking-tight text-white block text-sm">
+                  Organización de Datos
+                </span>
               </div>
             </div>
 
@@ -928,17 +1049,21 @@ const Lab2_2 = ({ goHome, setView }) => {
           <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
             <Target className="w-64 h-64 text-blue-400" />
           </div>
+
           <div className="flex items-start gap-6 relative z-10">
             <div className="p-4 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-2xl border border-blue-500/30 shrink-0">
               <PieChart className="w-8 h-8 text-blue-400" />
             </div>
+
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <span className="text-xs font-black text-blue-500 uppercase tracking-wider bg-blue-500/10 px-3 py-1 rounded-full">
                   Sección 2.2
                 </span>
               </div>
-              <h2 className="text-2xl font-black text-white mb-2 tracking-tight">2.2 Gráficos de Datos Cualitativos</h2>
+              <h2 className="text-2xl font-black text-white mb-2 tracking-tight">
+                2.2 Gráficos de Datos Cualitativos
+              </h2>
               <p className="text-slate-400 leading-relaxed max-w-3xl font-medium">
                 Aprende a crear visualizaciones efectivas para variables categóricas. Domina gráficos de barras, pastel,
                 barras agrupadas y apiladas. Una imagen dice más que mil palabras.
@@ -991,7 +1116,12 @@ const Lab2_2 = ({ goHome, setView }) => {
                           key={key}
                           onClick={() => {
                             setSelectedDataset(key);
-                            setConfig(prev => ({ ...prev, chartTitle: '', xAxisLabel: '', yAxisLabel: prev.showPercentage ? 'Porcentaje (%)' : 'Frecuencia' }));
+                            setConfig(prev => ({
+                              ...prev,
+                              chartTitle: '',
+                              xAxisLabel: '',
+                              yAxisLabel: prev.showPercentage ? 'Porcentaje (%)' : 'Frecuencia'
+                            }));
                           }}
                           className={`w-full p-4 rounded-xl border-2 transition-all text-left ${selectedDataset === key
                             ? 'bg-blue-500/20 border-blue-400 shadow-lg shadow-blue-500/20'
@@ -999,9 +1129,16 @@ const Lab2_2 = ({ goHome, setView }) => {
                             }`}
                         >
                           <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${selectedDataset === key ? 'bg-blue-500/30' : 'bg-slate-700/50'}`}>
-                              <IconComponent className={`w-5 h-5 ${selectedDataset === key ? 'text-blue-300' : 'text-slate-400'}`} />
+                            <div
+                              className={`p-2 rounded-lg ${selectedDataset === key ? 'bg-blue-500/30' : 'bg-slate-700/50'
+                                }`}
+                            >
+                              <IconComponent
+                                className={`w-5 h-5 ${selectedDataset === key ? 'text-blue-300' : 'text-slate-400'
+                                  }`}
+                              />
                             </div>
+
                             <div className="flex-1">
                               <div className="font-bold text-white text-sm">{ds.name}</div>
                               <div className="text-xs text-slate-400 mt-1">{ds.description}</div>
@@ -1046,6 +1183,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                         className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
                       />
                     </div>
+
                     <div>
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
                         Eje Y
@@ -1075,6 +1213,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                         <BarChart2 className="w-5 h-5" />
                         Barras
                       </button>
+
                       <button
                         onClick={() => setConfig({ ...config, chartType: 'pie', pieType: 'pie' })}
                         className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pie' && config.pieType === 'pie'
@@ -1085,6 +1224,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                         <Circle className="w-5 h-5" />
                         Pastel
                       </button>
+
                       <button
                         onClick={() => setConfig({ ...config, chartType: 'pie', pieType: 'donut' })}
                         className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pie' && config.pieType === 'donut'
@@ -1095,6 +1235,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                         <Square className="w-5 h-5" />
                         Donut
                       </button>
+
                       <button
                         onClick={() => setConfig({ ...config, chartType: 'pareto' })}
                         className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pareto'
@@ -1133,16 +1274,15 @@ const Lab2_2 = ({ goHome, setView }) => {
                       className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
                     >
                       {Object.entries(PALETTES).map(([key, pal]) => (
-                        <option key={key} value={key}>{pal.name}</option>
+                        <option key={key} value={key}>
+                          {pal.name}
+                        </option>
                       ))}
                     </select>
+
                     <div className="flex gap-1.5 mt-3">
                       {PALETTES[config.colorPalette].colors.slice(0, 6).map((color, i) => (
-                        <div
-                          key={i}
-                          className="h-7 flex-1 rounded-md shadow-sm"
-                          style={{ backgroundColor: color }}
-                        />
+                        <div key={i} className="h-7 flex-1 rounded-md shadow-sm" style={{ backgroundColor: color }} />
                       ))}
                     </div>
                   </div>
@@ -1157,7 +1297,9 @@ const Lab2_2 = ({ goHome, setView }) => {
                       className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
                     >
                       {Object.entries(BACKGROUNDS).map(([key, bg]) => (
-                        <option key={key} value={key}>{bg.name}</option>
+                        <option key={key} value={key}>
+                          {bg.name}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -1194,21 +1336,25 @@ const Lab2_2 = ({ goHome, setView }) => {
                     <Activity className="w-5 h-5 text-blue-400" />
                     Estadísticas
                   </h3>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
                       <div className="text-xs text-slate-400 uppercase font-bold mb-1">Total</div>
                       <div className="text-2xl font-black text-white">{stats.total}</div>
                     </div>
+
                     <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
                       <div className="text-xs text-slate-400 uppercase font-bold mb-1">Categorías</div>
                       <div className="text-2xl font-black text-white">{stats.count}</div>
                     </div>
+
                     {stats.max !== undefined && (
                       <>
                         <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
                           <div className="text-xs text-slate-400 uppercase font-bold mb-1">Máximo</div>
                           <div className="text-2xl font-black text-green-400">{stats.max}</div>
                         </div>
+
                         <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
                           <div className="text-xs text-slate-400 uppercase font-bold mb-1">Mínimo</div>
                           <div className="text-2xl font-black text-red-400">{stats.min}</div>
@@ -1227,6 +1373,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                     <Eye className="w-6 h-6 text-blue-400" />
                     Visualización
                   </h3>
+
                   {hasData && (
                     <button
                       onClick={exportChart}
@@ -1240,23 +1387,25 @@ const Lab2_2 = ({ goHome, setView }) => {
 
                 {renderChart()}
 
-                <div className="mt-6 p-6 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                  <div className="flex items-start gap-3">
-                    <Lightbulb className="w-6 h-6 text-yellow-400 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-bold text-white mb-2 text-sm">Interpretación</h4>
-                      <p className="text-sm text-slate-300 leading-relaxed">
-                        {config.chartType === 'bar'
-                          ? 'El gráfico de barras permite comparar directamente las frecuencias entre categorías. La altura de cada barra representa la magnitud, facilitando la identificación de máximos, mínimos y diferencias relativas.'
-                          : config.chartType === 'pareto'
-                            ? 'El diagrama de Pareto combina barras (frecuencias) con una línea acumulada (%). Útil para identificar las categorías que representan el 80% del total (principio 80/20).'
-                            : config.pieType === 'donut'
-                              ? 'El gráfico de donut muestra la composición porcentual con un diseño moderno. El espacio central puede incluir totales o información adicional. Ideal para 3-7 categorías principales.'
-                              : 'El gráfico de pastel visualiza proporciones como porciones de un todo. Cada sector representa el porcentaje de una categoría. Recomendado para 3-6 categorías con diferencias claras.'}
-                      </p>
+                {hasData && (
+                  <div className="mt-6 p-6 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <Lightbulb className="w-6 h-6 text-yellow-400 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-bold text-white mb-2 text-sm">Interpretación</h4>
+                        <p className="text-sm text-slate-300 leading-relaxed">
+                          {config.chartType === 'bar'
+                            ? 'El gráfico de barras permite comparar directamente las frecuencias entre categorías. La altura de cada barra representa la magnitud, facilitando la identificación de máximos, mínimos y diferencias relativas.'
+                            : config.chartType === 'pareto'
+                              ? 'El diagrama de Pareto combina barras (frecuencias) con una línea acumulada (%). Útil para identificar las categorías que representan el 80% del total (principio 80/20).'
+                              : config.pieType === 'donut'
+                                ? 'El gráfico de donut muestra la composición porcentual con un diseño moderno. El espacio central puede incluir totales o información adicional. Ideal para 3-7 categorías principales.'
+                                : 'El gráfico de pastel visualiza proporciones como porciones de un todo. Cada sector representa el porcentaje de una categoría. Recomendado para 3-6 categorías con diferencias claras.'}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
 
               {hasData && (
@@ -1266,6 +1415,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                       <TableIcon className="w-6 h-6 text-blue-400" />
                       Tabla de Frecuencias
                     </h3>
+
                     <button
                       onClick={() => setShowTable(!showTable)}
                       className="text-sm font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-2"
@@ -1282,6 +1432,14 @@ const Lab2_2 = ({ goHome, setView }) => {
           </div>
         )}
 
+        {/* ========================================
+      CONTINÚA CON PESTAÑA AVANZADOS
+      ======================================== */}
+        {/* ========================================
+      CONTINUACIÓN PARTE 3 - PESTAÑAS RESTANTES
+      ======================================== */}
+
+        {/* AVANZADOS */}
         {activeTab === 'avanzados' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-4 space-y-6">
@@ -1356,6 +1514,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                         <option key={key} value={key}>{pal.name}</option>
                       ))}
                     </select>
+
                     <div className="flex gap-1.5 mt-3">
                       {PALETTES[config.colorPalette].colors.slice(0, 6).map((color, i) => (
                         <div
@@ -1413,26 +1572,11 @@ const Lab2_2 = ({ goHome, setView }) => {
               </div>
 
               {renderChart()}
-
-              <div className="mt-6 p-6 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-                <div className="flex items-start gap-3">
-                  <Info className="w-6 h-6 text-purple-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-bold text-white mb-2 text-sm">
-                      {advancedDatasets[selectedDataset]?.type === 'grouped' ? 'Barras Agrupadas' : 'Barras Apiladas'}
-                    </h4>
-                    <p className="text-sm text-slate-300 leading-relaxed">
-                      {advancedDatasets[selectedDataset]?.type === 'grouped'
-                        ? 'Las barras agrupadas muestran subgrupos lado a lado, permitiendo comparaciones directas entre categorías y subcategorías. Cada conjunto de barras representa una categoría principal, facilitando la identificación de patrones y diferencias.'
-                        : 'Las barras apiladas revelan la composición interna de cada categoría principal. Cada segmento representa una subcategoría, mostrando tanto el total como las proporciones. Ideal para visualizar distribuciones y contribuciones relativas.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         )}
 
+        {/* DECISIÓN */}
         {activeTab === 'decision' && (
           <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
             <div className="mb-6">
@@ -1520,107 +1664,72 @@ const Lab2_2 = ({ goHome, setView }) => {
                 </tbody>
               </table>
             </div>
-
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-6 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                <div className="flex items-start gap-3">
-                  <Lightbulb className="w-6 h-6 text-blue-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-bold text-white mb-2 text-sm">Recomendaciones Generales</h4>
-                    <ul className="text-sm text-slate-300 space-y-1 leading-relaxed">
-                      <li>• Mantén la simplicidad: menos elementos visuales = mayor claridad</li>
-                      <li>• Usa colores consistentes y significativos</li>
-                      <li>• Incluye títulos descriptivos y etiquetas claras</li>
-                      <li>• Ordena categorías de forma lógica (alfabético, frecuencia, etc.)</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="w-6 h-6 text-orange-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-bold text-white mb-2 text-sm">Errores Comunes a Evitar</h4>
-                    <ul className="text-sm text-slate-300 space-y-1 leading-relaxed">
-                      <li>• Gráficos 3D que distorsionan proporciones</li>
-                      <li>• Demasiadas categorías en gráficos de pastel</li>
-                      <li>• Escalas truncadas que exageran diferencias</li>
-                      <li>• Falta de etiquetas o leyendas informativas</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
+        {/* UPLOAD */}
         {activeTab === 'upload' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-4 space-y-6">
               <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
                 <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">
                   <Upload className="w-5 h-5 text-blue-400" />
-                  Cargar Datos
+                  Tus Datos (CSV)
                 </h3>
 
-                {!uploadedFile ? (
-                  <div className="border-2 border-dashed border-slate-700 rounded-2xl p-8 text-center hover:border-blue-500/50 transition-all cursor-pointer">
-                    <Upload className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                    <p className="text-sm text-slate-400 mb-4">Arrastra o selecciona tu archivo CSV</p>
-                    <label className="inline-block px-6 py-3 bg-blue-500 hover:bg-blue-600 rounded-lg font-semibold cursor-pointer transition-all shadow-lg shadow-blue-500/20">
-                      Seleccionar Archivo
-                      <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
-                    </label>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
-                      <div className="flex items-start gap-3">
-                        <FileSpreadsheet className="w-8 h-8 text-green-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-bold text-white truncate">{uploadedFile.name}</div>
-                          <div className="text-sm text-slate-400">{uploadedData.length} registros, {uploadedColumns.length} columnas</div>
-                        </div>
-                      </div>
-                    </div>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  className="block w-full text-sm text-slate-300
+                     file:mr-4 file:py-2 file:px-4
+                     file:rounded-lg file:border-0
+                     file:text-sm file:font-bold
+                     file:bg-blue-500/20 file:text-blue-300
+                     hover:file:bg-blue-500/30"
+                />
 
+                {uploadedColumns.length > 0 && (
+                  <div className="mt-4 grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                        Modo de Análisis
+                        Modo
                       </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => setConfig({ ...config, variableMode: '1var', selectedVariable2: '', chartTitle: '' })}
-                          className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.variableMode === '1var'
-                            ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                            : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                            }`}
-                        >
-                          1 Variable
-                        </button>
-                        <button
-                          onClick={() => setConfig({ ...config, variableMode: '2var', chartTitle: '' })}
-                          className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.variableMode === '2var'
-                            ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                            : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                            }`}
-                        >
-                          2 Variables
-                        </button>
-                      </div>
+                      <select
+                        value={config.variableMode}
+                        onChange={(e) =>
+                          setConfig(prev => ({
+                            ...prev,
+                            variableMode: e.target.value,
+                            selectedVariable: '',
+                            selectedVariable2: '',
+                            chartType: 'bar',
+                            chartTitle: ''
+                          }))
+                        }
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="1var">1 variable</option>
+                        <option value="2var">2 variables</option>
+                      </select>
                     </div>
 
                     <div>
                       <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                        {config.variableMode === '1var' ? 'Variable' : 'Variable 1 (Categorías)'}
+                        Variable 1
                       </label>
                       <select
                         value={config.selectedVariable}
-                        onChange={(e) => setConfig({ ...config, selectedVariable: e.target.value, chartTitle: '' })}
+                        onChange={(e) =>
+                          setConfig(prev => ({
+                            ...prev,
+                            selectedVariable: e.target.value,
+                            chartTitle: ''
+                          }))
+                        }
                         className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
                       >
-                        <option value="">Seleccionar...</option>
+                        <option value="">Selecciona...</option>
                         {uploadedColumns.map(col => (
                           <option key={col} value={col}>{col}</option>
                         ))}
@@ -1628,435 +1737,236 @@ const Lab2_2 = ({ goHome, setView }) => {
                     </div>
 
                     {config.variableMode === '2var' && (
-                      <div>
+                      <div className="col-span-2">
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                          Variable 2 (Grupos)
+                          Variable 2 (grupo)
                         </label>
                         <select
                           value={config.selectedVariable2}
-                          onChange={(e) => setConfig({ ...config, selectedVariable2: e.target.value, chartTitle: '' })}
+                          onChange={(e) =>
+                            setConfig(prev => ({
+                              ...prev,
+                              selectedVariable2: e.target.value,
+                              chartTitle: ''
+                            }))
+                          }
                           className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
                         >
-                          <option value="">Seleccionar...</option>
-                          {uploadedColumns
-                            .filter(col => col !== config.selectedVariable)
-                            .map(col => (
-                              <option key={col} value={col}>{col}</option>
-                            ))}
+                          <option value="">Selecciona...</option>
+                          {uploadedColumns.map(col => (
+                            <option key={col} value={col}>{col}</option>
+                          ))}
                         </select>
                       </div>
-                    )}
-
-                    {config.selectedVariable && (
-                      <>
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                            Tipo de Gráfico
-                          </label>
-
-                          {config.variableMode === '1var' ? (
-                            <div className="grid grid-cols-4 gap-2">
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'bar' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'bar'
-                                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                <BarChart2 className="w-5 h-5" />
-                                Barras
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'pie', pieType: 'pie' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pie' && config.pieType === 'pie'
-                                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                <Circle className="w-5 h-5" />
-                                Pastel
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'pie', pieType: 'donut' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pie' && config.pieType === 'donut'
-                                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                <Square className="w-5 h-5" />
-                                Donut
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'pareto' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pareto'
-                                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                <Flame className="w-5 h-5" />
-                                Pareto
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-4 gap-2">
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'grouped' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'grouped'
-                                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                Agrupadas
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'stacked' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'stacked'
-                                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                Apiladas
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'stacked100' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'stacked100'
-                                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                100%
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'heatmap' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'heatmap'
-                                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                Heatmap
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Opciones específicas de 1 variable */}
-                        {config.variableMode === '1var' && (
-                          <>
-                            <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                                Ordenar
-                              </label>
-                              <select
-                                value={config.sortOrder}
-                                onChange={(e) => setConfig({ ...config, sortOrder: e.target.value })}
-                                className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
-                              >
-                                <option value="none">Sin ordenar</option>
-                                <option value="desc">Mayor a Menor</option>
-                                <option value="asc">Menor a Mayor</option>
-                              </select>
-                            </div>
-
-                            {/* Mostrar % solo si NO es Pareto (Pareto trabaja con frecuencias + acumulado) */}
-                            <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${config.chartType === 'pareto'
-                                ? 'bg-slate-800/10 opacity-60 cursor-not-allowed'
-                                : 'bg-slate-800/30 hover:bg-slate-800/50'
-                              }`}>
-                              <input
-                                type="checkbox"
-                                checked={config.showPercentage}
-                                disabled={config.chartType === 'pareto'}
-                                onChange={(e) => setConfig({ ...config, showPercentage: e.target.checked })}
-                                className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
-                              />
-                              <div className="flex-1">
-                                <span className="text-sm font-semibold text-white">Mostrar como porcentaje</span>
-                                {config.chartType === 'pareto' && (
-                                  <div className="text-[11px] text-slate-400 mt-1">
-                                    En Pareto se usan frecuencias y % acumulado (80/20).
-                                  </div>
-                                )}
-                              </div>
-                            </label>
-                          </>
-                        )}
-
-                        {/* Opciones generales */}
-                        <div className="space-y-3">
-                          <label className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-all">
-                            <input
-                              type="checkbox"
-                              checked={config.showGrid}
-                              onChange={(e) => setConfig({ ...config, showGrid: e.target.checked })}
-                              className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
-                            />
-                            <span className="text-sm font-semibold text-white">Mostrar cuadrícula</span>
-                          </label>
-
-                          <label className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-all">
-                            <input
-                              type="checkbox"
-                              checked={config.showValues}
-                              onChange={(e) => setConfig({ ...config, showValues: e.target.checked })}
-                              className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
-                            />
-                            <span className="text-sm font-semibold text-white">Mostrar valores</span>
-                          </label>
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                            Paleta de Colores
-                          </label>
-                          <select
-                            value={config.colorPalette}
-                            onChange={(e) => setConfig({ ...config, colorPalette: e.target.value })}
-                            className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
-                          >
-                            {Object.entries(PALETTES).map(([key, pal]) => (
-                              <option key={key} value={key}>{pal.name}</option>
-                            ))}
-                          </select>
-                          <div className="flex gap-1.5 mt-3">
-                            {PALETTES[config.colorPalette].colors.slice(0, 6).map((color, i) => (
-                              <div
-                                key={i}
-                                className="h-7 flex-1 rounded-md shadow-sm"
-                                style={{ backgroundColor: color }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                            Fondo
-                          </label>
-                          <select
-                            value={config.backgroundColor}
-                            onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
-                            className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
-                          >
-                            {Object.entries(BACKGROUNDS).map(([key, bg]) => (
-                              <option key={key} value={key}>{bg.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </>
-                    )}
-                    {config.selectedVariable && (
-                      <>
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                            Tipo de Gráfico
-                          </label>
-
-                          {config.variableMode === '1var' ? (
-                            <div className="grid grid-cols-4 gap-2">
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'bar' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'bar'
-                                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                <BarChart2 className="w-5 h-5" />
-                                Barras
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'pie', pieType: 'pie' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pie' && config.pieType === 'pie'
-                                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                <Circle className="w-5 h-5" />
-                                Pastel
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'pie', pieType: 'donut' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pie' && config.pieType === 'donut'
-                                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                <Square className="w-5 h-5" />
-                                Donut
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'pareto' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pareto'
-                                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                <Flame className="w-5 h-5" />
-                                Pareto
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-4 gap-2">
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'grouped' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'grouped'
-                                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                Agrupadas
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'stacked' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'stacked'
-                                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                Apiladas
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'stacked100' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'stacked100'
-                                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                100%
-                              </button>
-
-                              <button
-                                onClick={() => setConfig({ ...config, chartType: 'heatmap' })}
-                                className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'heatmap'
-                                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
-                                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                                  }`}
-                              >
-                                Heatmap
-                              </button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* =========================
-        1 VARIABLE: opciones extra
-       ========================= */}
-                        {config.variableMode === '1var' && (
-                          <>
-                            <div>
-                              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                                Ordenar
-                              </label>
-                              <select
-                                value={config.sortOrder}
-                                onChange={(e) => setConfig({ ...config, sortOrder: e.target.value })}
-                                className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
-                              >
-                                <option value="none">Sin ordenar</option>
-                                <option value="desc">Mayor a Menor</option>
-                                <option value="asc">Menor a Mayor</option>
-                              </select>
-                            </div>
-
-                            <label className={`flex items-center gap-3 p-3 rounded-lg transition-all ${config.chartType === 'pareto'
-                              ? 'bg-slate-800/10 opacity-60 cursor-not-allowed'
-                              : 'bg-slate-800/30 cursor-pointer hover:bg-slate-800/50'
-                              }`}>
-                              <input
-                                type="checkbox"
-                                checked={config.showPercentage}
-                                disabled={config.chartType === 'pareto'}
-                                onChange={(e) => setConfig({ ...config, showPercentage: e.target.checked })}
-                                className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
-                              />
-                              <div className="flex-1">
-                                <span className="text-sm font-semibold text-white">Mostrar como porcentaje</span>
-                                {config.chartType === 'pareto' && (
-                                  <div className="text-[11px] text-slate-400 mt-1">
-                                    Pareto usa frecuencias + % acumulado (80/20).
-                                  </div>
-                                )}
-                              </div>
-                            </label>
-                          </>
-                        )}
-
-                        {/* =========================
-        Controles generales
-       ========================= */}
-                        <label className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-all">
-                          <input
-                            type="checkbox"
-                            checked={config.showGrid}
-                            onChange={(e) => setConfig({ ...config, showGrid: e.target.checked })}
-                            className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
-                          />
-                          <span className="text-sm font-semibold text-white">Mostrar cuadrícula</span>
-                        </label>
-
-                        <label className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-all">
-                          <input
-                            type="checkbox"
-                            checked={config.showValues}
-                            onChange={(e) => setConfig({ ...config, showValues: e.target.checked })}
-                            className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
-                          />
-                          <span className="text-sm font-semibold text-white">Mostrar valores</span>
-                        </label>
-
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                            Paleta de Colores
-                          </label>
-                          <select
-                            value={config.colorPalette}
-                            onChange={(e) => setConfig({ ...config, colorPalette: e.target.value })}
-                            className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
-                          >
-                            {Object.entries(PALETTES).map(([key, pal]) => (
-                              <option key={key} value={key}>{pal.name}</option>
-                            ))}
-                          </select>
-                          <div className="flex gap-1.5 mt-3">
-                            {PALETTES[config.colorPalette].colors.slice(0, 6).map((color, i) => (
-                              <div
-                                key={i}
-                                className="h-7 flex-1 rounded-md shadow-sm"
-                                style={{ backgroundColor: color }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                            Fondo
-                          </label>
-                          <select
-                            value={config.backgroundColor}
-                            onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
-                            className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
-                          >
-                            {Object.entries(BACKGROUNDS).map(([key, bg]) => (
-                              <option key={key} value={key}>{bg.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </>
                     )}
                   </div>
                 )}
               </div>
+
+              {config.selectedVariable && (
+                <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
+                  <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-blue-400" />
+                    Configuración
+                  </h3>
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                        Tipo de Gráfico
+                      </label>
+
+                      {config.variableMode === '1var' ? (
+                        <div className="grid grid-cols-4 gap-2">
+                          <button
+                            onClick={() => setConfig({ ...config, chartType: 'bar' })}
+                            className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'bar'
+                              ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                              }`}
+                          >
+                            <BarChart2 className="w-5 h-5" />
+                            Barras
+                          </button>
+
+                          <button
+                            onClick={() => setConfig({ ...config, chartType: 'pie', pieType: 'pie' })}
+                            className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pie' && config.pieType === 'pie'
+                              ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                              }`}
+                          >
+                            <Circle className="w-5 h-5" />
+                            Pastel
+                          </button>
+
+                          <button
+                            onClick={() => setConfig({ ...config, chartType: 'pie', pieType: 'donut' })}
+                            className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pie' && config.pieType === 'donut'
+                              ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                              }`}
+                          >
+                            <Square className="w-5 h-5" />
+                            Donut
+                          </button>
+
+                          <button
+                            onClick={() => setConfig({ ...config, chartType: 'pareto' })}
+                            className={`p-3 rounded-lg font-semibold text-xs transition-all flex flex-col items-center gap-1 ${config.chartType === 'pareto'
+                              ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                              }`}
+                          >
+                            <Flame className="w-5 h-5" />
+                            Pareto
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-4 gap-2">
+                          <button
+                            onClick={() => setConfig({ ...config, chartType: 'grouped' })}
+                            className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'grouped'
+                              ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                              }`}
+                          >
+                            Agrupadas
+                          </button>
+
+                          <button
+                            onClick={() => setConfig({ ...config, chartType: 'stacked' })}
+                            className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'stacked'
+                              ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                              }`}
+                          >
+                            Apiladas
+                          </button>
+
+                          <button
+                            onClick={() => setConfig({ ...config, chartType: 'stacked100' })}
+                            className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'stacked100'
+                              ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                              }`}
+                          >
+                            100%
+                          </button>
+
+                          <button
+                            onClick={() => setConfig({ ...config, chartType: 'heatmap' })}
+                            className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'heatmap'
+                              ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                              : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                              }`}
+                          >
+                            Heatmap
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {config.variableMode === '1var' && (
+                      <>
+                        <div>
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                            Ordenar
+                          </label>
+                          <select
+                            value={config.sortOrder}
+                            onChange={(e) => setConfig({ ...config, sortOrder: e.target.value })}
+                            className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
+                          >
+                            <option value="none">Sin ordenar</option>
+                            <option value="desc">Mayor a Menor</option>
+                            <option value="asc">Menor a Mayor</option>
+                          </select>
+                        </div>
+
+                        <label
+                          className={`flex items-center gap-3 p-3 rounded-lg transition-all ${config.chartType === 'pareto'
+                            ? 'bg-slate-800/10 opacity-60 cursor-not-allowed'
+                            : 'bg-slate-800/30 cursor-pointer hover:bg-slate-800/50'
+                            }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={config.showPercentage}
+                            disabled={config.chartType === 'pareto'}
+                            onChange={(e) => setConfig({ ...config, showPercentage: e.target.checked })}
+                            className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
+                          />
+                          <div className="flex-1">
+                            <span className="text-sm font-semibold text-white">Mostrar como porcentaje</span>
+                            {config.chartType === 'pareto' && (
+                              <div className="text-[11px] text-slate-400 mt-1">
+                                Pareto usa frecuencias + % acumulado (80/20).
+                              </div>
+                            )}
+                          </div>
+                        </label>
+                      </>
+                    )}
+
+                    <label className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-all">
+                      <input
+                        type="checkbox"
+                        checked={config.showGrid}
+                        onChange={(e) => setConfig({ ...config, showGrid: e.target.checked })}
+                        className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-semibold text-white">Mostrar cuadrícula</span>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-all">
+                      <input
+                        type="checkbox"
+                        checked={config.showValues}
+                        onChange={(e) => setConfig({ ...config, showValues: e.target.checked })}
+                        className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
+                      />
+                      <span className="text-sm font-semibold text-white">Mostrar valores</span>
+                    </label>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                        Paleta de Colores
+                      </label>
+                      <select
+                        value={config.colorPalette}
+                        onChange={(e) => setConfig({ ...config, colorPalette: e.target.value })}
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
+                      >
+                        {Object.entries(PALETTES).map(([key, pal]) => (
+                          <option key={key} value={key}>{pal.name}</option>
+                        ))}
+                      </select>
+
+                      <div className="flex gap-1.5 mt-3">
+                        {PALETTES[config.colorPalette].colors.slice(0, 6).map((color, i) => (
+                          <div key={i} className="h-7 flex-1 rounded-md shadow-sm" style={{ backgroundColor: color }} />
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                        Fondo
+                      </label>
+                      <select
+                        value={config.backgroundColor}
+                        onChange={(e) => setConfig({ ...config, backgroundColor: e.target.value })}
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-semibold text-white focus:border-blue-500 focus:outline-none"
+                      >
+                        {Object.entries(BACKGROUNDS).map(([key, bg]) => (
+                          <option key={key} value={key}>{bg.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {stats && (
                 <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
@@ -2064,11 +1974,13 @@ const Lab2_2 = ({ goHome, setView }) => {
                     <Activity className="w-5 h-5 text-blue-400" />
                     Estadísticas
                   </h3>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
                       <div className="text-xs text-slate-400 uppercase font-bold mb-1">Total</div>
                       <div className="text-2xl font-black text-white">{stats.total}</div>
                     </div>
+
                     <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
                       <div className="text-xs text-slate-400 uppercase font-bold mb-1">
                         {config.variableMode === '2var' ? 'Grupos' : 'Categorías'}
@@ -2082,6 +1994,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                           <div className="text-xs text-slate-400 uppercase font-bold mb-1">Máximo</div>
                           <div className="text-2xl font-black text-green-400">{stats.max}</div>
                         </div>
+
                         <div className="bg-slate-800/30 p-4 rounded-xl border border-slate-700/50">
                           <div className="text-xs text-slate-400 uppercase font-bold mb-1">Mínimo</div>
                           <div className="text-2xl font-black text-red-400">{stats.min}</div>
@@ -2093,7 +2006,6 @@ const Lab2_2 = ({ goHome, setView }) => {
               )}
             </div>
 
-            {/* Panel derecho */}
             <div className="lg:col-span-8 space-y-6">
               <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
                 <div className="flex items-center justify-between mb-6">
@@ -2101,6 +2013,7 @@ const Lab2_2 = ({ goHome, setView }) => {
                     <Eye className="w-6 h-6 text-blue-400" />
                     Tu Visualización
                   </h3>
+
                   {hasData && (
                     <button
                       onClick={exportChart}
@@ -2120,10 +2033,13 @@ const Lab2_2 = ({ goHome, setView }) => {
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-xl font-black text-white flex items-center gap-2">
                       <TableIcon className="w-6 h-6 text-blue-400" />
-                      {config.variableMode === '2var' ? 'Tabla de Contingencia' : 'Tabla de Frecuencias'}
+                      {config.variableMode === '2var'
+                        ? 'Tabla de Contingencia'
+                        : 'Tabla de Frecuencias'}
                     </h3>
+
                     <button
-                      onClick={() => setShowTable(!showTable)}
+                      onClick={() => setShowTable(prev => !prev)}
                       className="text-sm font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-2"
                     >
                       {showTable ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -2143,14 +2059,3 @@ const Lab2_2 = ({ goHome, setView }) => {
 };
 
 export default Lab2_2;
-
-
-
-
-
-
-
-
-
-
-
