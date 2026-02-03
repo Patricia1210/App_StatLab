@@ -146,7 +146,7 @@ export default function LabBase({
                   accept=".csv"
                   onChange={(e) => {
                     // ✅ Debug clave: si esto sale, el problema es que NO estás pasando el handler
-                     if (typeof handleFileUpload !== "function") {
+                    if (typeof handleFileUpload !== "function") {
                       console.error("[LabBase] handleFileUpload NO es función:", handleFileUpload);
                       return;
                     }
@@ -154,17 +154,16 @@ export default function LabBase({
                     handleFileUpload(e);
                     // ✅ Importante en Safari: permite volver a seleccionar el mismo archivo
 
-                     e.target.value = "";
-                    }}
+                    e.target.value = "";
+                  }}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                   disabled={isUploading}
                 />
                 <div
-                  className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
-                    isUploading
+                  className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${isUploading
                       ? "border-indigo-500 bg-indigo-500/10"
                       : "border-slate-700 bg-slate-900/50 group-hover/upload:border-indigo-500 group-hover/upload:bg-slate-900"
-                  }`}
+                    }`}
                 >
                   {isUploading ? (
                     <RefreshCw className="w-10 h-10 text-indigo-400 mx-auto mb-3 animate-spin" />
@@ -249,11 +248,10 @@ export default function LabBase({
                         <button
                           key={t}
                           onClick={() => setConfig({ ...config, chartType: t })}
-                          className={`py-3 rounded-xl text-[10px] font-black tracking-widest border transition-all ${
-                            config.chartType === t
+                          className={`py-3 rounded-xl text-[10px] font-black tracking-widest border transition-all ${config.chartType === t
                               ? "bg-indigo-600 border-indigo-500 text-white shadow-lg scale-105"
                               : "bg-slate-900 border-slate-700 text-slate-400 hover:text-white"
-                          }`}
+                            }`}
                         >
                           {t.toUpperCase()}
                         </button>

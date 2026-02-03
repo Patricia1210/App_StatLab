@@ -8,10 +8,19 @@ const modules = import.meta.glob([
   "./**/Lab*.tsx",
 ]);
 
+// 🟢 DEBUG: muestra todos los labs detectados por Vite
+console.log(
+  "LABS detectados por Vite:",
+  Object.keys(modules)
+);
+
 export const LABS = Object.fromEntries(
   Object.entries(modules).map(([path, loader]) => {
     // "./chapter0/Lab0_2.jsx" -> "chapter0/Lab0_2"
-    const key = path.replace("./", "").replace(/\.(jsx|js|tsx)$/, "");
+    const key = path
+      .replace("./", "")
+      .replace(/\.(jsx|js|tsx)$/, "");
+
     return [key, React.lazy(loader)];
   })
 );
