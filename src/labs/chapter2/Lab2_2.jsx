@@ -10,9 +10,10 @@ import {
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Cell, PieChart as RechartsPieChart, Pie, Legend,
-  Label, ComposedChart, Line
+  Label, ComposedChart, Line, LabelList
 } from "recharts";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 
 const Lab2_2 = ({ goHome, setView }) => {
   const [activeTab, setActiveTab] = useState('basicos');
@@ -631,7 +632,7 @@ const Lab2_2 = ({ goHome, setView }) => {
     const bgColor = BACKGROUNDS[config.backgroundColor].color;
     const isLight = ['white', 'light', 'cream', 'slate'].includes(config.backgroundColor);
     const textColor = isLight ? '#475569' : '#94a3b8';
-    const gridColor = isLight ? 'rgba(148, 163, 184, 0.1)' : 'rgba(148, 163, 184, 0.05)';
+    const gridColor = isLight ? 'rgba(148, 163, 184, 0.35)' : 'rgba(148, 163, 184, 0.18)';
 
     // HEATMAP para 2 variables
     if (activeTab === 'upload' && config.variableMode === '2var' && config.chartType === 'heatmap') {
@@ -865,7 +866,19 @@ const Lab2_2 = ({ goHome, setView }) => {
                 {chartData.map((_, idx) => (
                   <Cell key={idx} fill={currentColors[idx % currentColors.length]} />
                 ))}
+
+                {config.showValues && (
+                  <LabelList
+                    dataKey="value"
+                    position="top"
+                    formatter={(v) => (config.showPercentage ? `${v}%` : v)}
+                    fill={isLight ? "#334155" : "#e2e8f0"}
+                    fontSize={11}
+                    fontWeight={700}
+                  />
+                )}
               </Bar>
+
             </BarChart>
           ) : config.chartType === 'pareto' ? (
             (() => {
@@ -1674,20 +1687,35 @@ const Lab2_2 = ({ goHome, setView }) => {
               <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
                 <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">
                   <Upload className="w-5 h-5 text-blue-400" />
-                  Tus Datos (CSV)
+                  Tus Datos
                 </h3>
 
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileUpload}
-                  className="block w-full text-sm text-slate-300
-                     file:mr-4 file:py-2 file:px-4
-                     file:rounded-lg file:border-0
-                     file:text-sm file:font-bold
-                     file:bg-blue-500/20 file:text-blue-300
-                     hover:file:bg-blue-500/30"
-                />
+                <div className="flex items-center gap-4 flex-wrap">
+                  <input
+                    id="file-upload"
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+
+                  <label
+                    htmlFor="file-upload"
+                    className="px-5 py-3 bg-blue-500/20 hover:bg-blue-500/30 
+               text-blue-300 font-bold rounded-xl cursor-pointer 
+               transition-all whitespace-nowrap"
+                  >
+                    Seleccionar archivo
+                  </label>
+
+                  <span
+                    className={`text-sm ${uploadedFile ? "text-green-400 font-semibold" : "text-slate-400"
+                      } capitalize break-all`}
+                  >
+                    {uploadedFile ? uploadedFile.name : "Nada seleccionado"}
+                  </span>
+                </div>
+
 
                 {uploadedColumns.length > 0 && (
                   <div className="mt-4 grid grid-cols-2 gap-3">
