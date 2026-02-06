@@ -1145,7 +1145,10 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                           return (
                             <th
                               key={col.key}
-                              onClick={() => { setSelectedArea(key); setSelectedColumn(null); }}
+                              onClick={() => {
+                                if (col.key === 'id') return;     // no seleccionable
+                                setSelectedColumn(col);          // ✅ aquí sí seleccionas
+                              }}
                               className={`p-4 text-left font-bold text-sm border-2 transition-all ${col.key === 'id'
                                 ? 'bg-slate-800/50 border-slate-700 cursor-not-allowed'
                                 : selectedColumn?.key === col.key
@@ -1159,13 +1162,10 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
                             >
                               <div className="flex items-center justify-between">
                                 <span className="text-white">{col.name}</span>
-                                {isClassified && (
-                                  <span className="text-xl">
-                                    {isCorrect ? '✅' : '❌'}
-                                  </span>
-                                )}
+                                {isClassified && <span className="text-xl">{isCorrect ? '✅' : '❌'}</span>}
                               </div>
                             </th>
+
                           );
                         })}
                       </tr>
