@@ -659,10 +659,13 @@ const Lab2_3 = ({ goHome, setView }) => {
 
         if (sizeKey) {
           const s = coerceNumber(r[sizeKey]);
-          point.size = s === null ? 100 : Math.max(60, Math.min(400, s * 10));
+          // tamaños más pequeños y con clamp razonable
+          point.size = s === null ? 30 : Math.max(12, Math.min(70, s * 2));
         } else {
-          point.size = 100;
+          // tamaño fijo pequeño
+          point.size = 30;
         }
+
 
         return point;
       })
@@ -1179,7 +1182,7 @@ const Lab2_3 = ({ goHome, setView }) => {
                 )}
               </YAxis>
 
-              <ZAxis type="number" dataKey="size" range={[60, 400]} />
+              <ZAxis type="number" dataKey="size" range={[12, 70]} />
               <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<ScatterTooltip />} />
 
               {colorKey ? (
@@ -1194,6 +1197,7 @@ const Lab2_3 = ({ goHome, setView }) => {
                           name={g}
                           data={chartData.filter(d => d.group === g)}
                           fill={currentColors[idx % currentColors.length]}
+                          fillOpacity={0.65}
                         />
                       ))}
                     </>
