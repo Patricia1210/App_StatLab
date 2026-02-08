@@ -14,7 +14,7 @@ import {
 import Papa from "papaparse";
 import * as XLSX from 'xlsx';
 
-const Lab2_4_Enhanced = ({ goHome, setView }) => {
+const Lab2_4 = ({ goHome, setView }) => {
   const [activeTab, setActiveTab] = useState('intro');
   const [selectedDataset, setSelectedDataset] = useState('');
   const [chartKey, setChartKey] = useState(0);
@@ -87,9 +87,9 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
       icon: Database,
       data: Array(344).fill(0).map(() => {
         const species = Math.random();
-        if (species < 0.44) return Math.round(3700 + (Math.random() - 0.5) * 800); // Adelie
-        if (species < 0.64) return Math.round(3733 + (Math.random() - 0.5) * 900); // Chinstrap
-        return Math.round(5076 + (Math.random() - 0.5) * 1100); // Gentoo
+        if (species < 0.44) return Math.round(3700 + (Math.random() - 0.5) * 800);
+        if (species < 0.64) return Math.round(3733 + (Math.random() - 0.5) * 900);
+        return Math.round(5076 + (Math.random() - 0.5) * 1100);
       }),
       defaultBins: 20,
       xLabel: "Masa Corporal (g)",
@@ -101,9 +101,9 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
       icon: Activity,
       data: Array(714).fill(0).map(() => {
         const ageGroup = Math.random();
-        if (ageGroup < 0.15) return Math.round(5 + Math.random() * 10); // Niños
-        if (ageGroup < 0.70) return Math.round(20 + Math.random() * 25); // Adultos jóvenes
-        return Math.round(45 + Math.random() * 35); // Adultos mayores
+        if (ageGroup < 0.15) return Math.round(5 + Math.random() * 10);
+        if (ageGroup < 0.70) return Math.round(20 + Math.random() * 25);
+        return Math.round(45 + Math.random() * 35);
       }),
       defaultBins: 16,
       xLabel: "Edad (años)",
@@ -159,18 +159,15 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
     setChartKey(prev => prev + 1);
   }, [activeTab]);
 
-  // Calcular curva normal
   const normalDistribution = (x, mean, stdDev) => {
     const exponent = -Math.pow(x - mean, 2) / (2 * Math.pow(stdDev, 2));
     return (1 / (stdDev * Math.sqrt(2 * Math.PI))) * Math.exp(exponent);
   };
 
-  // Método de Sturges para bins
   const calculateSturgesBins = (n) => {
     return Math.ceil(1 + 3.322 * Math.log10(n));
   };
 
-  // Detectar outliers (IQR method)
   const detectOutliers = (data) => {
     const sorted = [...data].sort((a, b) => a - b);
     const n = sorted.length;
@@ -179,8 +176,13 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
     const iqr = q3 - q1;
     const lowerBound = q1 - 1.5 * iqr;
     const upperBound = q3 + 1.5 * iqr;
-
     return data.filter(val => val < lowerBound || val > upperBound);
+  };
+
+  const findBinIndexForValue = (histogram, value) => {
+    return histogram.findIndex(bin =>
+      value >= bin.binStart && value <= bin.binEnd
+    );
   };
 
   const calculateHistogram = (data, bins, method = 'equal') => {
@@ -218,9 +220,10 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
       cumulative += bin.frequency;
       return {
         ...bin,
-        density: (bin.frequency / (total * binWidth)).toFixed(4),
-        percentage: ((bin.frequency / total) * 100).toFixed(1),
-        cumulative: ((cumulative / total) * 100).toFixed(1),
+        density: +((bin.frequency / (total * binWidth)).toFixed(4)),
+        percentage: +(((bin.frequency / total) * 100).toFixed(1)),
+        cumulative: +(((cumulative / total) * 100).toFixed(1)),
+        cumulativeNum: parseFloat(((cumulative / total) * 100).toFixed(1)),
         label: `${bin.binStart.toFixed(1)}-${bin.binEnd.toFixed(1)}`
       };
     });
@@ -261,12 +264,8 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
     const q3 = sorted[Math.floor(n * 0.75)];
     const iqr = q3 - q1;
 
-    // Skewness (sesgo)
     const skewness = data.reduce((acc, val) => acc + Math.pow((val - mean) / stdDev, 3), 0) / n;
-
-    // Kurtosis (curtosis)
     const kurtosis = data.reduce((acc, val) => acc + Math.pow((val - mean) / stdDev, 4), 0) / n - 3;
-
     const outliers = detectOutliers(data);
 
     return {
@@ -283,7 +282,7 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
       skewness: skewness.toFixed(3),
       kurtosis: kurtosis.toFixed(3),
       outliers: outliers.length,
-      cv: ((stdDev / mean) * 100).toFixed(2) // Coeficiente de variación
+      cv: ((stdDev / mean) * 100).toFixed(2)
     };
   };
 
@@ -417,6 +416,23 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
     }
     return null;
   };
+  const MeanLabel = ({ viewBox, value }) => {
+    const { x, y } = viewBox; // esquina superior
+    return (
+      <text x={x} y={y - 10} textAnchor="middle" fontSize={12} fontWeight={800} fill="#10b981">
+        {value}
+      </text>
+    );
+  };
+
+  const MedianLabel = ({ viewBox, value }) => {
+    const { x, y } = viewBox;
+    return (
+      <text x={x} y={y + 8} textAnchor="middle" fontSize={12} fontWeight={800} fill="#3b82f6">
+        {value}
+      </text>
+    );
+  };
 
   const renderChart = () => {
     const data = getActiveData();
@@ -445,7 +461,6 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
     const textColor = isLight ? '#475569' : '#94a3b8';
     const gridColor = isLight ? 'rgba(71, 85, 105, 0.2)' : 'rgba(148, 163, 184, 0.2)';
 
-    // Calcular curva normal si está activada
     let normalCurveData = [];
     if (showNormalCurve && stats) {
       const mean = parseFloat(stats.mean);
@@ -461,6 +476,14 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
 
     const chartData = showNormalCurve ? normalCurveData : histogram;
 
+    let meanBinIndex = -1;
+    let medianBinIndex = -1;
+
+    if (stats) {
+      meanBinIndex = findBinIndexForValue(histogram, parseFloat(stats.mean));
+      medianBinIndex = findBinIndexForValue(histogram, parseFloat(stats.median));
+    }
+
     return (
       <div key={chartKey} ref={chartRef} style={{ backgroundColor: bgColor }} className="rounded-xl p-6">
         {chartTitle && (
@@ -471,8 +494,20 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
 
         <ResponsiveContainer width="100%" height={450}>
           {showCumulative ? (
-            <ComposedChart data={chartData} margin={{ top: 20, right: 60, left: 60, bottom: 80 }}>
-              {showGrid && <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} strokeWidth={1.5} />}
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 50, right: 60, left: 60, bottom: 80 }}
+              barCategoryGap={0}
+              barGap={0}
+            >
+              {showGrid && (
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke={gridColor}
+                  strokeWidth={1.5}
+                />
+              )}
 
               <XAxis
                 dataKey="label"
@@ -488,7 +523,11 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
                     value={xLabel}
                     position="insideBottom"
                     offset={-20}
-                    style={{ fill: isLight ? '#1e293b' : '#cbd5e1', fontWeight: 700, fontSize: 12 }}
+                    style={{
+                      fill: isLight ? "#1e293b" : "#cbd5e1",
+                      fontWeight: 700,
+                      fontSize: 12,
+                    }}
                   />
                 )}
               </XAxis>
@@ -503,7 +542,12 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
                   value="Frecuencia"
                   angle={-90}
                   position="insideLeft"
-                  style={{ fill: isLight ? '#1e293b' : '#cbd5e1', fontWeight: 700, fontSize: 12, textAnchor: 'middle' }}
+                  style={{
+                    fill: isLight ? "#1e293b" : "#cbd5e1",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    textAnchor: "middle",
+                  }}
                 />
               </YAxis>
 
@@ -519,37 +563,86 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
                   value="% Acumulado"
                   angle={-90}
                   position="insideRight"
-                  style={{ fill: isLight ? '#1e293b' : '#cbd5e1', fontWeight: 700, fontSize: 12, textAnchor: 'middle' }}
+                  style={{
+                    fill: isLight ? "#1e293b" : "#cbd5e1",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    textAnchor: "middle",
+                  }}
                 />
               </YAxis>
 
               <Tooltip content={<CustomTooltip />} />
 
-              <Bar yAxisId="left" dataKey="frequency" radius={[8, 8, 0, 0]} maxBarSize={60}>
+              <Bar yAxisId="left" dataKey="frequency" radius={[0, 0, 0, 0]}>
                 {chartData.map((_, idx) => (
                   <Cell key={idx} fill={currentColors[idx % currentColors.length]} />
                 ))}
               </Bar>
 
+              {/* ✅ Acumulada debe ser NUMÉRICA (usa dataKey="cumulative") */}
               <Line
                 yAxisId="right"
                 type="monotone"
                 dataKey="cumulative"
                 stroke="#ef4444"
                 strokeWidth={3}
-                dot={{ r: 4, fill: '#ef4444' }}
+                dot={{ r: 4, fill: "#ef4444" }}
               />
 
-              {stats && (
-                <>
-                  <ReferenceLine yAxisId="left" y={parseFloat(stats.mean)} stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" label={{ value: `Media: ${stats.mean}`, fill: '#10b981', fontSize: 11, fontWeight: 700 }} />
-                  <ReferenceLine yAxisId="left" y={parseFloat(stats.median)} stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" label={{ value: `Mediana: ${stats.median}`, fill: '#3b82f6', fontSize: 11, fontWeight: 700 }} />
-                </>
+              {/* ✅ FIX CRÍTICO: yAxisId="left" en ReferenceLine para evitar yAxisId=0 */}
+              {stats && meanBinIndex >= 0 && (
+                <ReferenceLine
+                  yAxisId="left"
+                  x={histogram[meanBinIndex].label}
+                  stroke="#10b981"
+                  strokeWidth={2.5}
+                  strokeDasharray="5 5"
+                  label={{
+                    value: `μ = ${stats.mean}`,
+                    position: "insideTopLeft",
+                    offset: 10,
+                    fill: "#10b981",
+                    fontSize: 13,
+                    fontWeight: 800,
+                  }}
+                />
+              )}
+
+              {/* ✅ Separación visual: otra posición + offset distinto */}
+              {stats && medianBinIndex >= 0 && (
+                <ReferenceLine
+                  yAxisId="left"
+                  x={histogram[medianBinIndex].label}
+                  stroke="#3b82f6"
+                  strokeWidth={2.5}
+                  strokeDasharray="3 3"
+                  label={{
+                    value: `Me = ${stats.median}`,
+                    position: "insideTopRight",
+                    offset: 10,
+                    fill: "#3b82f6",
+                    fontSize: 13,
+                    fontWeight: 800,
+                  }}
+                />
               )}
             </ComposedChart>
           ) : (
-            <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 60, bottom: 80 }}>
-              {showGrid && <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} strokeWidth={1.5} />}
+            <ComposedChart
+              data={chartData}
+              margin={{ top: 50, right: 30, left: 60, bottom: 80 }}
+              barCategoryGap={0}
+              barGap={0}
+            >
+              {showGrid && (
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke={gridColor}
+                  strokeWidth={1.5}
+                />
+              )}
 
               <XAxis
                 dataKey="label"
@@ -565,7 +658,11 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
                     value={xLabel}
                     position="insideBottom"
                     offset={-20}
-                    style={{ fill: isLight ? '#1e293b' : '#cbd5e1', fontWeight: 700, fontSize: 12 }}
+                    style={{
+                      fill: isLight ? "#1e293b" : "#cbd5e1",
+                      fontWeight: 700,
+                      fontSize: 12,
+                    }}
                   />
                 )}
               </XAxis>
@@ -580,35 +677,65 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
                     value={yLabel}
                     angle={-90}
                     position="insideLeft"
-                    style={{ fill: isLight ? '#1e293b' : '#cbd5e1', fontWeight: 700, fontSize: 12, textAnchor: 'middle' }}
+                    style={{
+                      fill: isLight ? "#1e293b" : "#cbd5e1",
+                      fontWeight: 700,
+                      fontSize: 12,
+                      textAnchor: "middle",
+                    }}
                   />
                 )}
               </YAxis>
 
               <Tooltip content={<CustomTooltip />} />
 
-              <Bar
-                dataKey="frequency"
-                radius={[8, 8, 0, 0]}
-                maxBarSize={60}
-              >
+              <Bar dataKey="frequency" radius={[0, 0, 0, 0]}>
                 {chartData.map((_, idx) => (
                   <Cell key={idx} fill={currentColors[idx % currentColors.length]} />
                 ))}
               </Bar>
 
               {showNormalCurve && (
-                <Line
-                  type="monotone"
-                  dataKey="normal"
-                  stroke="#ef4444"
-                  strokeWidth={3}
-                  dot={false}
+                <Line type="monotone" dataKey="normal" stroke="#ef4444" strokeWidth={3} dot={false} />
+              )}
+
+              {stats && meanBinIndex >= 0 && (
+                <ReferenceLine
+                  x={histogram[meanBinIndex].label}
+                  stroke="#10b981"
+                  strokeWidth={2.5}
+                  strokeDasharray="5 5"
+                  label={{
+                    value: `μ = ${stats.mean}`,
+                    position: "insideTopLeft",
+                    offset: 10,
+                    fill: "#10b981",
+                    fontSize: 13,
+                    fontWeight: 800,
+                  }}
+                />
+              )}
+
+              {stats && medianBinIndex >= 0 && (
+                <ReferenceLine
+                  x={histogram[medianBinIndex].label}
+                  stroke="#3b82f6"
+                  strokeWidth={2.5}
+                  strokeDasharray="3 3"
+                  label={{
+                    value: `Me = ${stats.median}`,
+                    position: "insideTopRight",
+                    offset: 10,
+                    fill: "#3b82f6",
+                    fontSize: 13,
+                    fontWeight: 800,
+                  }}
                 />
               )}
             </ComposedChart>
           )}
         </ResponsiveContainer>
+
       </div>
     );
   };
@@ -1494,4 +1621,4 @@ const Lab2_4_Enhanced = ({ goHome, setView }) => {
   );
 };
 
-export default Lab2_4_Enhanced;
+export default Lab2_4;
