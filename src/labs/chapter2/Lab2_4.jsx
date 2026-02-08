@@ -1596,7 +1596,7 @@ const Lab2_4 = ({ goHome, setView }) => {
         <div className="flex gap-3 border-b border-white/10 pb-4 flex-wrap">
           {[
             { id: 'intro', label: 'Introducción', icon: Info },
-            { id: 'basics', label: 'Ejemplos Avanzados', icon: BarChart3 },
+            { id: 'basics', label: 'Datasets clásicos', icon: BarChart3 },
             { id: 'upload', label: 'Tus Datos', icon: Upload }
           ].map(tab => (
             <button
