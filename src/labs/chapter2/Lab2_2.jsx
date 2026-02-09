@@ -23,6 +23,9 @@ const Lab2_2 = ({ goHome, setView }) => {
   const [uploadedColumns, setUploadedColumns] = useState([]);
   const [showTable, setShowTable] = useState(false);
   const chartRef = useRef(null);
+  const mosaicWrapRef = useRef(null);
+  const [mosaicHover, setMosaicHover] = useState(null);
+
 
   // ============================================
   // NUEVO: Key única para forzar remontaje del gráfico
@@ -634,70 +637,301 @@ const Lab2_2 = ({ goHome, setView }) => {
     const textColor = isLight ? '#475569' : '#94a3b8';
     const gridColor = isLight ? 'rgba(148, 163, 184, 0.35)' : 'rgba(148, 163, 184, 0.18)';
 
-    // HEATMAP para 2 variables
-    if (activeTab === 'upload' && config.variableMode === '2var' && config.chartType === 'heatmap') {
+    // MOSAIC para 2 variables
+    // MOSAIC para 2 variables (CLÁSICO: como imagen 1)
+    // - ancho por columnas (Variable 2)
+    // - altura dentro de cada columna por filas (Variable 1)
+    // - color por filas (Variable 1)
+    if (activeTab === "upload" && config.variableMode === "2var" && config.chartType === "mosaic") {
       const m = buildContingencyMatrix();
       if (!m) return null;
 
-      const { rows, cols, counts, max } = m;
+      const { rows, cols, counts } = m;
+
+      // Total general
+      const grandTotal =
+        rows.reduce((sum, r) => sum + cols.reduce((s2, c) => s2 + (counts[r]?.[c] || 0), 0), 0) || 1;
+
+      // Totales por columna (controlan anchos)
+      const colTotals = cols.reduce((acc, c) => {
+        acc[c] = rows.reduce((s, r) => s + (counts[r]?.[c] || 0), 0);
+        return acc;
+      }, {});
+
+      // Totales por fila (solo para tooltip/estadísticas)
+      const rowTotals = rows.reduce((acc, r) => {
+        acc[r] = cols.reduce((s, c) => s + (counts[r]?.[c] || 0), 0);
+        return acc;
+      }, {});
+
+      // SVG layout
+      const W = 900;
+      const H = 500;
+      const padL = 140; // margen para etiquetas de filas
+      const padT = 40;  // margen para etiquetas de columnas
+      const innerW = W - padL - 20;
+      const innerH = H - padT - 20;
+
+      // ✅ construir rectángulos (CLAVE: aquí nace `rects`)
+      // x: por columnas (Variable 2)
+      // y/h: dentro de cada columna, por filas (Variable 1) según % de esa columna
+      const rects = [];
+      let xCursor = padL;
+
+      cols.forEach((c) => {
+        const colT = colTotals[c] || 0;
+        const wCol = innerW * (colT / grandTotal);
+
+        let yCursor = padT;
+
+        rows.forEach((r) => {
+          const v = counts[r]?.[c] || 0;
+          const hCell = innerH * (colT ? (v / colT) : 0);
+
+          rects.push({
+            r, c, v,
+            x: xCursor,
+            y: yCursor,
+            w: wCol,
+            h: hCell,
+          });
+
+          yCursor += hCell;
+        });
+
+        xCursor += wCol;
+      });
 
       return (
         <div key={chartKey} ref={chartRef} style={{ backgroundColor: bgColor }} className="rounded-xl p-6">
           {config.chartTitle && (
-            <h3
-              className="text-center font-bold text-lg mb-4"
-              style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}
-            >
-              {config.chartTitle}
-            </h3>
+            <div className="text-center mb-4">
+              <h3
+                className="font-black tracking-wide text-xl"
+                style={{ color: isLight ? "#0f172a" : "#e2e8f0" }}
+              >
+                {String(config.chartTitle).toUpperCase()}
+              </h3>
+
+              {/* subtítulo opcional y discreto (publicación-friendly) */}
+              <div className="text-xs font-semibold text-slate-400 mt-1">
+                Mosaico: {String(config.selectedVariable)} (Y) vs {String(config.selectedVariable2)} (X)
+              </div>
+            </div>
           )}
 
-          <div className="overflow-x-auto">
-            <div className="min-w-[700px]">
-              <div
-                className="grid"
-                style={{ gridTemplateColumns: `220px repeat(${cols.length}, minmax(70px, 1fr))` }}
+          <div ref={mosaicWrapRef} className="w-full overflow-x-auto relative">
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-[460px]">
+              {/* etiqueta superior */}
+              {/* etiqueta discreta del cruce (arriba-izquierda) */}
+              <text
+                x={padL}
+                y={24}
+                fontSize="12"
+                fontWeight="800"
+                fill={isLight ? "#334155" : "#e2e8f0"}
               >
-                <div className="p-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  {config.selectedVariable} \ {config.selectedVariable2}
-                </div>
+                {String(config.selectedVariable)} vs {String(config.selectedVariable2)}
+              </text>
 
-                {cols.map(c => (
-                  <div key={c} className="p-2 text-xs font-bold text-slate-300 text-center">
-                    {c}
+              {/* etiqueta del eje Y */}
+              <text
+                x={24}
+                y={padT + innerH / 2}
+                textAnchor="middle"
+                fontSize="12"
+                fontWeight="900"
+                fill={isLight ? "#334155" : "#e2e8f0"}
+                transform={`rotate(-90 24 ${padT + innerH / 2})`}
+              >
+                {String(config.selectedVariable)} (Y)
+              </text>
+              {/* etiqueta del eje X */}
+              <text
+                x={padL + innerW / 2}
+                y={padT + innerH + 55}
+                textAnchor="middle"
+                fontSize="12"
+                fontWeight="900"
+                fill={isLight ? "#334155" : "#e2e8f0"}
+              >
+                {String(config.selectedVariable2)} (X)
+              </text>
+
+              {/* etiquetas de columnas (abajo = eje X) */}
+              {(() => {
+                let xCursor = padL;
+
+                return cols.map((c) => {
+                  const wCol = innerW * ((colTotals?.[c] || 0) / (grandTotal || 1));
+                  const cx = xCursor + wCol / 2;
+                  xCursor += wCol;
+
+                  return (
+                    <text
+                      key={`col-${c}`}
+                      x={cx}
+                      y={padT + innerH + 28}          // ✅ ABAJO
+                      textAnchor="middle"
+                      fontSize="12"
+                      fontWeight="800"
+                      fill={isLight ? "#334155" : "#e2e8f0"}
+                    >
+                      {String(c)}
+                    </text>
+                  );
+                });
+              })()}
+
+
+              {/* etiquetas de filas (izquierda): como guía (no perfectas en mosaico clásico, pero útiles) */}
+              {(() => {
+                // Colocamos “yes/no/etc.” como guía en 25/75 si son 2,
+                // y si son más, los distribuimos uniforme.
+                const n = rows.length || 1;
+                return rows.map((r, idx) => {
+                  const cy = padT + innerH * ((idx + 0.5) / n);
+                  return (
+                    <text
+                      key={`row-${r}`}
+                      x={padL - 12}
+                      y={cy}
+                      textAnchor="end"
+                      dominantBaseline="middle"
+                      fontSize="11"
+                      fontWeight="800"
+                      fill={isLight ? "#475569" : "#cbd5e1"}
+                    >
+                      {String(r)}
+                    </text>
+                  );
+                });
+              })()}
+
+              {/* rectángulos */}
+              {rects.map((d, i) => {
+                if (d.w <= 0 || d.h <= 0) return null;
+
+                // ✅ color por FILA (Variable 1) -> estilo imagen 1
+                const rowIdx = Math.max(0, rows.indexOf(d.r));
+                const rowColor = currentColors[rowIdx % currentColors.length];
+
+                return (
+                  <g key={`${d.r}-${d.c}-${i}`}>
+                    <rect
+                      x={d.x}
+                      y={d.y}
+                      width={Math.max(0, d.w)}
+                      height={Math.max(0, d.h)}
+                      rx="10"
+                      ry="10"
+                      fill={rowColor}
+                      fillOpacity={0.55}
+                      stroke={
+                        config.showGrid
+                          ? (isLight ? "rgba(148,163,184,0.55)" : "rgba(148,163,184,0.28)")
+                          : "rgba(255,255,255,0.06)"
+                      }
+                      strokeWidth={1}
+                      onMouseMove={(e) => {
+                        if (!mosaicWrapRef.current) return;
+                        const rbox = mosaicWrapRef.current.getBoundingClientRect();
+
+                        const pctTotal = (d.v / (grandTotal || 1)) * 100;
+                        const pctRow = (d.v / (rowTotals[d.r] || 1)) * 100;
+                        const pctCol = (d.v / (colTotals[d.c] || 1)) * 100;
+
+                        setMosaicHover({
+                          x: e.clientX - rbox.left + 12,
+                          y: e.clientY - rbox.top + 12,
+                          r: d.r,
+                          c: d.c,
+                          v: d.v,
+                          pctTotal,
+                          pctRow,
+                          pctCol,
+                        });
+                      }}
+                      onMouseLeave={() => setMosaicHover(null)}
+                    />
+
+                    {/* valores: % del total como en imagen 1 */}
+                    {config.showValues && d.w > 60 && d.h > 34 && (
+                      <text
+                        x={d.x + d.w / 2}
+                        y={d.y + d.h / 2}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontSize="12"
+                        fontWeight="900"
+                        fill={isLight ? "#0f172a" : "#0b1220"}
+                        opacity={0.92}
+                      >
+                        {((d.v / grandTotal) * 100).toFixed(1)}%
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+
+            {/* tooltip flotante */}
+            {mosaicHover && (
+              <div className="absolute z-50 pointer-events-none" style={{ left: mosaicHover.x, top: mosaicHover.y }}>
+                <div className="bg-slate-900/95 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
+                  <div className="text-[12px] font-black text-white mb-1">
+                    {config.selectedVariable} = {mosaicHover.r} · {config.selectedVariable2} = {mosaicHover.c}
                   </div>
-                ))}
 
-                {rows.map(rw => (
-                  <React.Fragment key={rw}>
-                    <div className="p-2 text-xs font-semibold text-slate-200">
-                      {rw}
-                    </div>
+                  <div className="text-[12px] text-slate-200">
+                    <span className="font-bold text-blue-300">Frecuencia:</span> {mosaicHover.v}
+                  </div>
 
-                    {cols.map(cl => {
-                      const v = counts[rw]?.[cl] || 0;
-                      const intensity = max ? v / max : 0;
-                      const alpha = 0.15 + intensity * 0.75;
+                  <div className="text-[11px] text-slate-300 mt-1 leading-snug">
+                    <div><span className="font-bold text-slate-100">% del total:</span> {mosaicHover.pctTotal.toFixed(1)}%</div>
+                    <div><span className="font-bold text-slate-100">% en su fila:</span> {mosaicHover.pctRow.toFixed(1)}%</div>
+                    <div><span className="font-bold text-slate-100">% en su columna:</span> {mosaicHover.pctCol.toFixed(1)}%</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
-                      return (
-                        <div
-                          key={`${rw}__${cl}`}
-                          className="m-1 rounded-lg border border-white/10 flex items-center justify-center h-12"
-                          style={{ backgroundColor: `rgba(59,130,246,${alpha})` }}
-                          title={`${rw} / ${cl}: ${v}`}
-                        >
-                          <span className="text-xs font-bold text-white">{v}</span>
-                        </div>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
+            {/* ✅ Leyenda (COLOR = variable 2 / columnas) */}
+            <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                  COLOR: {String(config.selectedVariable2)}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-1">
+                  (Cada color representa una categoría de <b>{String(config.selectedVariable2)}</b>)
+                </div>
               </div>
 
-              <p className="mt-4 text-xs text-slate-400">
-                Intensidad = mayor frecuencia en la celda (más oscuro = más casos).
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {cols.map((c, i) => (
+                  <div
+                    key={c}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${isLight
+                      ? "bg-white border-slate-200 text-slate-700"
+                      : "bg-slate-900/40 border-white/10 text-slate-200"
+                      }`}
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-sm"
+                      style={{ backgroundColor: currentColors[i % currentColors.length] }}
+                    />
+                    {String(c)}
+                  </div>
+                ))}
+              </div>
             </div>
+
+
+            <p className="mt-3 text-[11px] text-slate-400 leading-relaxed">
+              Nota: el <b>área</b> de cada bloque es proporcional a la frecuencia observada; el <b>color</b> identifica la categoría de <b>{String(config.selectedVariable2)}</b>.
+            </p>
+
+
           </div>
         </div>
       );
@@ -706,7 +940,7 @@ const Lab2_2 = ({ goHome, setView }) => {
     // Gráficos avanzados (agrupado/apilado/stacked100)
     if (
       (activeTab === 'avanzados' && advancedDatasets[selectedDataset]) ||
-      (activeTab === 'upload' && config.variableMode === '2var' && config.chartType !== 'heatmap')
+      (activeTab === 'upload' && config.variableMode === '2var' && !['mosaic'].includes(config.chartType))
     ) {
       const dataset = activeTab === 'avanzados'
         ? advancedDatasets[selectedDataset]
@@ -1883,14 +2117,15 @@ const Lab2_2 = ({ goHome, setView }) => {
                           </button>
 
                           <button
-                            onClick={() => setConfig({ ...config, chartType: 'heatmap' })}
-                            className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'heatmap'
+                            onClick={() => setConfig({ ...config, chartType: 'mosaic' })}
+                            className={`p-3 rounded-lg font-semibold text-xs transition-all ${config.chartType === 'mosaic'
                               ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
                               : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
                               }`}
                           >
-                            Heatmap
+                            Mosaico
                           </button>
+
                         </div>
                       )}
                     </div>
