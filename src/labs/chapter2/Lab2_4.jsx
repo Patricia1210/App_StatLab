@@ -1391,6 +1391,52 @@ const Lab2_4 = ({ goHome, setView }) => {
                       ))}
                     </select>
                   </div>
+                  {/* 🎨 Personalización de Texto */}
+                  <div className="border-t border-slate-700 pt-4 space-y-4">
+                    <h4 className="text-sm font-bold text-purple-400 uppercase tracking-wider">
+                      Personalización de Texto
+                    </h4>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
+                        Título del gráfico
+                      </label>
+                      <input
+                        type="text"
+                        value={chartTitle}
+                        onChange={(e) => setChartTitle(e.target.value)}
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                        placeholder="Ej. Distribución de Temperaturas"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
+                        Etiqueta eje X
+                      </label>
+                      <input
+                        type="text"
+                        value={xLabel}
+                        onChange={(e) => setXLabel(e.target.value)}
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                        placeholder="Ej. Temperatura (°C)"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase block mb-1">
+                        Etiqueta eje Y
+                      </label>
+                      <input
+                        type="text"
+                        value={yLabel}
+                        onChange={(e) => setYLabel(e.target.value)}
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                        placeholder="Ej. Frecuencia"
+                      />
+                    </div>
+                  </div>
+
 
                   <div className="space-y-3">
                     <label className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-all">
