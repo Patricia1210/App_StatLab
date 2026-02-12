@@ -3,6 +3,7 @@ import { Users, Shuffle, RefreshCw, TrendingUp, BarChart3, ArrowLeft, Upload, Fi
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Sparkles } from 'lucide-react';
 
 const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
   // ============================================================================
@@ -1331,13 +1332,8 @@ const Lab12PoblacionMuestra = ({ goHome, goToSection, setView }) => {
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-xl relative overflow-hidden">
-                <div className="absolute inset-0 bg-white/10"></div>
-                <svg className="w-7 h-7 text-white relative z-10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
-                  <circle cx="18" cy="6" r="2" fill="currentColor" />
-                  <circle cx="6" cy="18" r="1.5" fill="currentColor" />
-                </svg>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg">
+                <Sparkles className="w-6 h-6 text-white animate-pulse" />
               </div>
               <div>
                 <span className="text-xs text-blue-400 font-bold block uppercase tracking-wider">Capítulo 1</span>

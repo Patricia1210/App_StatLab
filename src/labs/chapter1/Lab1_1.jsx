@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Info, ArrowRight, ChevronDown } from 'lucide-react';
+import { BookOpen, Info, ArrowRight, ChevronDown, Sparkles } from 'lucide-react';
 
 const Lab1_1 = ({ goHome }) => {
   const [expandedCard, setExpandedCard] = useState(null);
@@ -12,33 +12,33 @@ const Lab1_1 = ({ goHome }) => {
   const [activeStep, setActiveStep] = useState(null);
 
   const processSteps = [
-    { 
-      emoji: '📥', 
-      label: 'RECOLECTAR', 
+    {
+      emoji: '📥',
+      label: 'RECOLECTAR',
       color: 'cyan',
       title: 'Recolección de Datos',
       description: 'Obtener información relevante mediante encuestas, experimentos, observación o bases de datos existentes.',
       examples: ['Encuestas a clientes', 'Mediciones en laboratorio', 'Registros de ventas']
     },
-    { 
-      emoji: '📋', 
-      label: 'ORGANIZAR', 
+    {
+      emoji: '📋',
+      label: 'ORGANIZAR',
       color: 'blue',
       title: 'Organización de Datos',
       description: 'Estructurar la información en tablas, categorías o formatos que faciliten su análisis.',
       examples: ['Tablas de frecuencia', 'Bases de datos', 'Hojas de cálculo']
     },
-    { 
-      emoji: '🔍', 
-      label: 'ANALIZAR', 
+    {
+      emoji: '🔍',
+      label: 'ANALIZAR',
       color: 'indigo',
       title: 'Análisis de Datos',
       description: 'Aplicar métodos estadísticos para encontrar patrones, tendencias y relaciones en los datos.',
       examples: ['Cálculo de promedios', 'Gráficos estadísticos', 'Pruebas de hipótesis']
     },
-    { 
-      emoji: '💡', 
-      label: 'INTERPRETAR', 
+    {
+      emoji: '💡',
+      label: 'INTERPRETAR',
       color: 'purple',
       title: 'Interpretación de Resultados',
       description: 'Traducir los hallazgos estadísticos en conclusiones significativas para la toma de decisiones.',
@@ -176,12 +176,12 @@ const Lab1_1 = ({ goHome }) => {
     } else {
       isCorrect = answer;
     }
-    
+
     if (isCorrect) setScore(score + 1);
-    
+
     setLastAnswer({ isCorrect, explanation: q.explanation });
     setShowResult(true);
-    
+
     setTimeout(() => {
       if (currentQuestion < quiz.questions.length - 1) {
         setCurrentQuestion(currentQuestion + 1);
@@ -215,39 +215,37 @@ const Lab1_1 = ({ goHome }) => {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-indigo-500/10 rounded-full blur-[150px] animate-pulse"></div>
-        <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '2s'}}></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '4s'}}></div>
+        <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '4s' }}></div>
       </div>
 
       <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <button
-            type="button"
-            onClick={(e) => {
-                 e.preventDefault();
-                   e.stopPropagation();
-                     if (goHome) goHome(e);
-                     }}
-                       className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
-                       >
-                        <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
-                         Volver al Índice
-                         </button>
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (goHome) goHome(e);
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
+            >
+              <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
+              Volver al Índice
+            </button>
 
-            
+
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                </svg>
+                <Sparkles className="w-6 h-6 text-white animate-pulse" />
               </div>
               <div>
                 <span className="text-xs text-cyan-400 font-bold block">Capítulo 1</span>
                 <span className="font-black tracking-tight text-white block text-sm">Introducción a la Estadística</span>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2 px-4 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
               <div className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></div>
               <span className="text-xs text-cyan-400 font-black uppercase tracking-wider">Lab 1.1</span>
@@ -257,7 +255,7 @@ const Lab1_1 = ({ goHome }) => {
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-8 relative">
-        
+
         <section className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 border-l-4 border-l-cyan-500 relative overflow-hidden group hover:shadow-2xl hover:shadow-cyan-500/10 transition-all duration-500">
           <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
             <BookOpen className="w-32 h-32" />
@@ -274,7 +272,7 @@ const Lab1_1 = ({ goHome }) => {
               </div>
               <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Definición de Estadística</h2>
               <p className="text-slate-400 leading-relaxed max-w-3xl font-medium">
-                Explora los conceptos fundamentales de la estadística a través de visualizaciones interactivas. 
+                Explora los conceptos fundamentales de la estadística a través de visualizaciones interactivas.
                 Comprende qué es la estadística, sus objetivos y aplicaciones en el mundo real.
               </p>
             </div>
@@ -289,13 +287,13 @@ const Lab1_1 = ({ goHome }) => {
               <div>
                 <h3 className="text-3xl font-black text-white mb-4">¿Qué es la Estadística?</h3>
                 <p className="text-xl text-slate-300 leading-relaxed max-w-4xl">
-                  La estadística es la <strong className="text-cyan-400">ciencia</strong> que se encarga de la 
-                  <strong className="text-cyan-400"> recolección, organización, análisis e interpretación</strong> de datos 
+                  La estadística es la <strong className="text-cyan-400">ciencia</strong> que se encarga de la
+                  <strong className="text-cyan-400"> recolección, organización, análisis e interpretación</strong> de datos
                   para tomar decisiones informadas en presencia de incertidumbre.
                 </p>
               </div>
             </div>
-            
+
             <div className="mb-4">
               <p className="text-sm text-cyan-400 font-bold text-center mb-4">
                 ✨ Haz clic en cada paso para conocer más detalles
@@ -307,11 +305,10 @@ const Lab1_1 = ({ goHome }) => {
                 <button
                   key={i}
                   onClick={() => setActiveStep(activeStep === i ? null : i)}
-                  className={`bg-slate-950/50 p-6 rounded-2xl border text-center hover:scale-105 transition-all cursor-pointer ${
-                    activeStep === i 
-                      ? 'border-cyan-500 shadow-lg shadow-cyan-500/30 scale-105' 
+                  className={`bg-slate-950/50 p-6 rounded-2xl border text-center hover:scale-105 transition-all cursor-pointer ${activeStep === i
+                      ? 'border-cyan-500 shadow-lg shadow-cyan-500/30 scale-105'
                       : 'border-white/20 hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/20'
-                  }`}
+                    }`}
                 >
                   <div className="text-3xl mb-3">{item.emoji}</div>
                   <div className="font-black text-sm text-white">{item.label}</div>
@@ -336,7 +333,7 @@ const Lab1_1 = ({ goHome }) => {
                     ✕
                   </button>
                 </div>
-                
+
                 <div className="bg-slate-950/50 p-5 rounded-xl border border-cyan-500/20">
                   <p className="text-sm font-bold text-cyan-400 mb-3">💡 Ejemplos prácticos:</p>
                   <ul className="space-y-2">
@@ -354,8 +351,8 @@ const Lab1_1 = ({ goHome }) => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          <div 
+
+          <div
             onClick={() => toggleCard('descriptiva')}
             className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 relative overflow-hidden hover:shadow-2xl hover:shadow-emerald-500/10 transition-all cursor-pointer"
           >
@@ -375,7 +372,7 @@ const Lab1_1 = ({ goHome }) => {
               </div>
 
               <p className="text-slate-300 leading-relaxed">
-                Se enfoca en <strong className="text-emerald-400">organizar, resumir y presentar</strong> datos de manera comprensible 
+                Se enfoca en <strong className="text-emerald-400">organizar, resumir y presentar</strong> datos de manera comprensible
                 mediante tablas, gráficos y medidas numéricas.
               </p>
 
@@ -411,7 +408,7 @@ const Lab1_1 = ({ goHome }) => {
             </div>
           </div>
 
-          <div 
+          <div
             onClick={() => toggleCard('inferencial')}
             className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 relative overflow-hidden hover:shadow-2xl hover:shadow-purple-500/10 transition-all cursor-pointer"
           >
@@ -431,7 +428,7 @@ const Lab1_1 = ({ goHome }) => {
               </div>
 
               <p className="text-slate-300 leading-relaxed">
-                Utiliza muestras para hacer <strong className="text-purple-400">predicciones, estimaciones y conclusiones </strong> 
+                Utiliza muestras para hacer <strong className="text-purple-400">predicciones, estimaciones y conclusiones </strong>
                 sobre una población completa mediante pruebas de hipótesis y modelos estadísticos.
               </p>
 
@@ -523,16 +520,16 @@ const Lab1_1 = ({ goHome }) => {
                     <p className="text-lg font-bold text-white mb-6">
                       {quizzes[activeQuiz].questions[currentQuestion].text}
                     </p>
-                    
+
                     {activeQuiz === 'tipos' ? (
                       <div className="grid grid-cols-2 gap-4">
-                        <button 
+                        <button
                           onClick={() => checkAnswer('descriptiva')}
                           className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all font-bold text-emerald-400"
                         >
                           📈 Descriptiva
                         </button>
-                        <button 
+                        <button
                           onClick={() => checkAnswer('inferencial')}
                           className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 transition-all font-bold text-purple-400"
                         >
@@ -580,20 +577,20 @@ const Lab1_1 = ({ goHome }) => {
                     {score}/{quizzes[activeQuiz].questions.length}
                   </p>
                   <p className="text-slate-300 mb-6">
-                    {score === quizzes[activeQuiz].questions.length 
-                      ? '¡Dominas este tema!' 
-                      : (score / quizzes[activeQuiz].questions.length) * 100 >= 70 
-                        ? '¡Excelente comprensión!' 
+                    {score === quizzes[activeQuiz].questions.length
+                      ? '¡Dominas este tema!'
+                      : (score / quizzes[activeQuiz].questions.length) * 100 >= 70
+                        ? '¡Excelente comprensión!'
                         : 'Revisa el material y vuelve a intentarlo'}
                   </p>
                   <div className="flex gap-4 justify-center">
-                    <button 
+                    <button
                       onClick={() => startQuiz(activeQuiz)}
                       className="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-bold hover:scale-105 transition-transform"
                     >
                       🔄 Reintentar
                     </button>
-                    <button 
+                    <button
                       onClick={resetQuiz}
                       className="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold transition-all"
                     >

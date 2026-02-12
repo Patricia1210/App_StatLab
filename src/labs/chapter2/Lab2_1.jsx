@@ -700,7 +700,7 @@ const Lab2_1 = ({ goHome, setView, setSelectedSection, goToSection }) => {
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-xl relative overflow-hidden">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-xl relative overflow-hidden">
                 <div className="absolute inset-0 bg-white/10"></div>
                 <BarChart3 className="w-7 h-7 text-white relative z-10" />
               </div>

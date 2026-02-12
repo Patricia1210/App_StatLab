@@ -729,7 +729,7 @@ const App = () => {
       );
     }
 
-    // ✅ Lab 3.2 - Medidas de Dispersión (cuando esté listo)
+    // ✅ Lab 3.2 - Medidas de Dispersión
     if (normalizedSection === "3.2" || normalizedSection === "lab-3-2" || normalizedSection === "3-2") {
       return (
         <LabRenderer
@@ -737,7 +737,6 @@ const App = () => {
           goHome={goHome}
           goToSection={goToSection}
           setView={setView}
-          setSelectedSection={setSelectedSection}
           selectedSection={normalizedSection}
           activeSectionData={activeSectionData}
         />

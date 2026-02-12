@@ -5,7 +5,7 @@ import {
   Info, FileSpreadsheet, BookOpen, LineChart,
   ScatterChart, Box, LayoutGrid, AlertCircle, Settings,
   ChevronDown, ChevronUp, BarChart2, Flame,
-  Circle, Square, Grid
+  Circle, Square, Grid, BarChart3
 } from "lucide-react";
 import {
   ResponsiveContainer, LineChart as RechartsLineChart, Line,
@@ -2816,9 +2816,9 @@ const Lab2_3 = ({ goHome, setView }) => {
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-green-500 to-blue-500 flex items-center justify-center shadow-xl relative overflow-hidden">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-xl relative overflow-hidden">
                 <div className="absolute inset-0 bg-white/10"></div>
-                <TrendingUp className="w-7 h-7 text-white relative z-10" />
+                <BarChart3 className="w-7 h-7 text-white relative z-10" />
               </div>
               <div>
                 <span className="text-xs text-green-400 font-bold block uppercase tracking-wider">
