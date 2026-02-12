@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Info, ArrowRight, ChevronDown, Sparkles } from 'lucide-react';
+import { BookOpen, Info, ArrowRight, ChevronDown, Sparkles, ArrowLeft } from 'lucide-react';
 
 const Lab1_1 = ({ goHome }) => {
   const [expandedCard, setExpandedCard] = useState(null);
@@ -223,17 +223,24 @@ const Lab1_1 = ({ goHome }) => {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (goHome) goHome(e);
+              onClick={() => {
+                if (goHome) goHome();
+                else if (setView) setView("home");
               }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl 
+           bg-white/5 hover:bg-blue-500/10 
+           border border-white/10 hover:border-blue-500/40
+           text-sm font-bold text-slate-200
+           transition-all duration-300 
+           hover:scale-105 hover:shadow-lg
+           active:scale-95
+           group"
+
             >
-              <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
-              Volver al Índice
+              <ArrowLeft className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" />
+              <span className="tracking-wide">Volver al Índice</span>
             </button>
+
 
 
             <div className="flex items-center gap-3">
@@ -306,8 +313,8 @@ const Lab1_1 = ({ goHome }) => {
                   key={i}
                   onClick={() => setActiveStep(activeStep === i ? null : i)}
                   className={`bg-slate-950/50 p-6 rounded-2xl border text-center hover:scale-105 transition-all cursor-pointer ${activeStep === i
-                      ? 'border-cyan-500 shadow-lg shadow-cyan-500/30 scale-105'
-                      : 'border-white/20 hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/20'
+                    ? 'border-cyan-500 shadow-lg shadow-cyan-500/30 scale-105'
+                    : 'border-white/20 hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/20'
                     }`}
                 >
                   <div className="text-3xl mb-3">{item.emoji}</div>

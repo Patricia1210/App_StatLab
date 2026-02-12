@@ -1,7 +1,7 @@
 import React from "react";
 import {
   BarChart3, ArrowRight, Sparkles, BookOpen, Info,
-  Play, Download, Database, TrendingUp, ChevronDown
+  Play, Download, Database, TrendingUp, ChevronDown, ArrowLeft
 } from "lucide-react";
 
 export default function Lab0_1({ setView, goHome, goToSection }) {
@@ -9,29 +9,32 @@ export default function Lab0_1({ setView, goHome, goToSection }) {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-indigo-500/10 rounded-full blur-[150px] animate-pulse"></div>
-        <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '2s'}}></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{animationDelay: '4s'}}></div>
+        <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '4s' }}></div>
       </div>
 
       <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl shadow-black/20">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (goHome) {
-                  goHome(e);
-                } else {
-                  setView('home');
-                  window.history.pushState({}, '', window.location.pathname);
-                }
+              onClick={() => {
+                if (goHome) goHome();
+                else if (setView) setView("home");
               }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl 
+           bg-white/5 hover:bg-blue-500/10 
+           border border-white/10 hover:border-blue-500/40
+           text-sm font-bold text-slate-200
+           transition-all duration-300 
+           hover:scale-105 hover:shadow-lg
+           active:scale-95
+           group"
+
             >
-              <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
-              Volver al Índice
+              <ArrowLeft className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" />
+              <span className="tracking-wide">Volver al Índice</span>
             </button>
+
 
             <div className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
               <Sparkles className="w-5 h-5 text-indigo-400 animate-pulse" />
@@ -47,7 +50,7 @@ export default function Lab0_1({ setView, goHome, goToSection }) {
             <BookOpen className="w-12 h-12 text-white" />
           </div>
           <h1 className="text-5xl md:text-6xl font-black text-white tracking-tight leading-tight">
-            ¡Bienvenido al <br/>
+            ¡Bienvenido al <br />
             <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Laboratorio de Estadística!
             </span>

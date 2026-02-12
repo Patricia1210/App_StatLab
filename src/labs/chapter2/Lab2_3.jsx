@@ -2809,16 +2809,25 @@ const Lab2_3 = ({ goHome, setView }) => {
                 if (goHome) goHome();
                 else if (setView) setView("home");
               }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl 
+           bg-white/5 hover:bg-blue-500/10 
+           border border-white/10 hover:border-blue-500/40
+           text-sm font-bold text-slate-200
+           transition-all duration-300 
+           hover:scale-105 hover:shadow-lg
+           active:scale-95
+           group"
+
             >
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-              Volver al Índice
+              <ArrowLeft className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" />
+              <span className="tracking-wide">Volver al Índice</span>
             </button>
+
 
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-xl relative overflow-hidden">
                 <div className="absolute inset-0 bg-white/10"></div>
-                <BarChart3 className="w-7 h-7 text-white relative z-10" />
+                <BarChart3 className="w-7 h-7 text-white relative z-10 animate-pulse" />
               </div>
               <div>
                 <span className="text-xs text-green-400 font-bold block uppercase tracking-wider">

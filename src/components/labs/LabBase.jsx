@@ -2,7 +2,7 @@
 import React from "react";
 import {
   ArrowRight, BookOpen, Info, Upload, RefreshCw, FileJson,
-  Database, TrendingUp, Download, Activity, Calculator, Eye, EyeOff, BarChart3
+  Database, TrendingUp, Download, Activity, Calculator, Eye, EyeOff, BarChart3, ArrowLeft
 } from "lucide-react";
 
 import {
@@ -73,15 +73,20 @@ export default function LabBase({
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <button
-              onClick={() => {
-                setView("home");
-                window.history.pushState({}, "", window.location.pathname);
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold transition-all group"
+              onClick={() => setView && setView("home")}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl 
+             bg-white/5 hover:bg-blue-500/10 
+             border border-white/10 hover:border-blue-500/40
+             text-sm font-bold text-slate-200
+             transition-all duration-300 
+             hover:scale-105 hover:shadow-lg
+             active:scale-95
+             group"
             >
-              <ArrowRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
-              Volver al Índice
+              <ArrowLeft className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" />
+              <span className="tracking-wide">Volver al Índice</span>
             </button>
+
 
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-xl bg-gradient-to-r ${activeSectionData.chapter.color} flex items-center justify-center shadow-lg`}>
@@ -161,8 +166,8 @@ export default function LabBase({
                 />
                 <div
                   className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${isUploading
-                      ? "border-indigo-500 bg-indigo-500/10"
-                      : "border-slate-700 bg-slate-900/50 group-hover/upload:border-indigo-500 group-hover/upload:bg-slate-900"
+                    ? "border-indigo-500 bg-indigo-500/10"
+                    : "border-slate-700 bg-slate-900/50 group-hover/upload:border-indigo-500 group-hover/upload:bg-slate-900"
                     }`}
                 >
                   {isUploading ? (
@@ -249,8 +254,8 @@ export default function LabBase({
                           key={t}
                           onClick={() => setConfig({ ...config, chartType: t })}
                           className={`py-3 rounded-xl text-[10px] font-black tracking-widest border transition-all ${config.chartType === t
-                              ? "bg-indigo-600 border-indigo-500 text-white shadow-lg scale-105"
-                              : "bg-slate-900 border-slate-700 text-slate-400 hover:text-white"
+                            ? "bg-indigo-600 border-indigo-500 text-white shadow-lg scale-105"
+                            : "bg-slate-900 border-slate-700 text-slate-400 hover:text-white"
                             }`}
                         >
                           {t.toUpperCase()}
