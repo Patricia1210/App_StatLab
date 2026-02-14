@@ -147,17 +147,26 @@ const calculateMode = (data) => {
   if (!data || data.length === 0) return null;
 
   const frequency = {};
-  data.forEach(val => frequency[val] = (frequency[val] || 0) + 1);
+
+  // 🔹 Redondeamos a 2 decimales para evitar errores de precisión
+  data.forEach(val => {
+    const rounded = Number(parseFloat(val).toFixed(2));
+    frequency[rounded] = (frequency[rounded] || 0) + 1;
+  });
 
   const maxFreq = Math.max(...Object.values(frequency));
+
+  // Si todos aparecen una sola vez → no hay moda
   if (maxFreq === 1) return null;
 
   const modes = Object.keys(frequency)
     .filter(k => frequency[k] === maxFreq)
     .map(Number);
 
-  return modes.length === 1 ? modes[0] : modes;
+  // 🔹 Para visualización SOLO mostramos una
+  return modes.length > 0 ? modes[0] : null;
 };
+
 
 const calculateVariance = (data) => {
   if (!data || data.length < 2) return null;
@@ -360,6 +369,8 @@ const Lab3_1 = ({ goHome, setView }) => {
   const [appliedInputs, setAppliedInputs] = useState({ mean: '', median: '', mode: '' });
   const [appliedFeedback, setAppliedFeedback] = useState(null);
 
+  const [manualData, setManualData] = useState(["", "", "", "", ""]);
+
   const [appliedConcept, setAppliedConcept] = useState({
     dist: null,
     cv: null,
@@ -505,9 +516,8 @@ const Lab3_1 = ({ goHome, setView }) => {
 
     const realMean = round2(mean);
     const realMedian = round2(median);
-    const realMode = mode == null
-      ? null
-      : (Array.isArray(mode) ? round2(mode[0]) : round2(mode));
+    const realMode = mode == null ? null : round2(mode);
+
 
     const userMean = appliedInputs.mean === ''
       ? null
@@ -530,6 +540,46 @@ const Lab3_1 = ({ goHome, setView }) => {
       appliedConcept.dist === 'sesgo_pos' && distReal === 'sesgada a la derecha' ||
       appliedConcept.dist === 'sesgo_neg' && distReal === 'sesgada a la izquierda' ||
       appliedConcept.dist === 'no_det' && distReal === 'desconocida';
+
+    // Convertir a números válidos
+    const numericData = manualData
+      .map(v => parseFloat(v))
+      .filter(v => !isNaN(v));
+
+    // MEDIA
+    const mean =
+      numericData.length > 0
+        ? numericData.reduce((a, b) => a + b, 0) / numericData.length
+        : null;
+
+    // MEDIANA
+    const median = (() => {
+      if (numericData.length === 0) return null;
+
+      const sorted = [...numericData].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+
+      return sorted.length % 2 !== 0
+        ? sorted[mid]
+        : (sorted[mid - 1] + sorted[mid]) / 2;
+    })();
+
+    // MODA
+    const mode = (() => {
+      if (numericData.length === 0) return "-";
+
+      const freq = {};
+      numericData.forEach(n => {
+        freq[n] = (freq[n] || 0) + 1;
+      });
+
+      const maxFreq = Math.max(...Object.values(freq));
+      if (maxFreq === 1) return "No hay moda";
+
+      return Object.keys(freq)
+        .filter(k => freq[k] === maxFreq)
+        .join(", ");
+    })();
 
     let cvCategory = null;
     if (cv == null) cvCategory = 'no_interpretable';
@@ -912,7 +962,7 @@ const Lab3_1 = ({ goHome, setView }) => {
           <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
             <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">
               <Database className="w-5 h-5 text-indigo-400" />
-              Datasets
+              Datasets Clásicos
             </h3>
             <div className="space-y-3 mb-4">
               {Object.entries(PRESET_DATASETS).map(([key, ds]) => {
@@ -1108,7 +1158,13 @@ const Lab3_1 = ({ goHome, setView }) => {
                 </div>
 
                 <ResponsiveContainer width="100%" height={500}>
-                  <ComposedChart data={bins} margin={{ top: 40, right: 30, left: 60, bottom: 80 }}>
+                  <ComposedChart
+                    data={bins}
+                    margin={{ top: 40, right: 30, left: 60, bottom: 80 }}
+                    barCategoryGap="0%"
+                    barGap={0}
+                  >
+
                     <defs>
                       <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor={currentColors[0]} stopOpacity={0.8} />
@@ -1119,7 +1175,11 @@ const Lab3_1 = ({ goHome, setView }) => {
                     <XAxis
                       dataKey="center"
                       type="number"
-                      domain={['dataMin - 1', 'dataMax + 1']}
+                      domain={[
+                        bins.length ? bins[0].start : 0,
+                        bins.length ? bins[bins.length - 1].end : 0
+                      ]}
+
                       tick={{ fill: '#94a3b8', fontSize: 11 }}
                       label={{
                         value: xLabel,
@@ -1131,18 +1191,19 @@ const Lab3_1 = ({ goHome, setView }) => {
                     <YAxis
                       tick={{ fill: '#94a3b8', fontSize: 11 }}
                       label={{
-                        value: yLabel,
+                        value: yAxisType === 'count' ? 'Frecuencia' : 'Porcentaje (%)',
                         angle: -90,
                         position: 'insideLeft',
                         style: { fill: '#cbd5e1', fontWeight: 700, fontSize: 12 }
                       }}
                     />
+
                     <Tooltip content={({ active, payload }) => {
                       if (active && payload?.length) {
                         const d = payload[0].payload;
                         return (
                           <div className="bg-slate-900/95 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
-                            <p className="text-white font-bold text-xs mb-1">{d.start.toFixed(2)} - {d.end.toFixed(2)} {dataUnit}</p>
+                            <p className="text-white font-bold text-xs mb-1">{d.start.toFixed(1)} - {d.end.toFixed(1)} {dataUnit}</p>
                             <p className="text-indigo-400 text-sm">Frecuencia: {d.count}</p>
                             <p className="text-purple-400 text-xs">{d.relFreq}% del total</p>
                             {d.hasOutliers && <p className="text-orange-400 text-xs font-bold mt-1">⚠️ Contiene outliers</p>}
@@ -1152,7 +1213,7 @@ const Lab3_1 = ({ goHome, setView }) => {
                       return null;
                     }} />
 
-                    <Bar dataKey={displayValue} fill="url(#barGrad)" barCategoryGap={0} barGap={0}>
+                    <Bar dataKey={yAxisType === 'count' ? 'count' : 'relFreq'} fill="url(#barGrad)">
                       {bins.map((entry, idx) => (
                         <Cell key={idx} fill={entry.hasOutliers ? '#f59e0b' : currentColors[idx % currentColors.length]} opacity={entry.hasOutliers ? 1 : 0.8} />
                       ))}
@@ -1188,9 +1249,9 @@ const Lab3_1 = ({ goHome, setView }) => {
                       />
                     )}
 
-                    {showMean && mean && <ReferenceLine x={mean} stroke="#22d3ee" strokeWidth={3} strokeDasharray="5 5" label={{ value: `μ=${mean.toFixed(2)}`, position: 'top', fill: '#22d3ee', fontWeight: 700, fontSize: 11 }} />}
+                    {showMean && mean && <ReferenceLine x={mean} stroke="#22d3ee" strokeWidth={3} strokeDasharray="5 5" label={{ value: `μ=${mean.toFixed(1)}`, position: 'top', fill: '#22d3ee', fontWeight: 700, fontSize: 11 }} />}
 
-                    {showMedian && median && <ReferenceLine x={median} stroke="#c084fc" strokeWidth={3} strokeDasharray="3 3" label={{ value: `Me=${median.toFixed(2)}`, position: 'top', fill: '#c084fc', fontWeight: 700, fontSize: 11, offset: 15 }} />}
+                    {showMedian && median && <ReferenceLine x={median} stroke="#c084fc" strokeWidth={3} strokeDasharray="3 3" label={{ value: `Me=${median.toFixed(1)}`, position: 'top', fill: '#c084fc', fontWeight: 700, fontSize: 11, offset: 15 }} />}
 
                     {showMode && mode != null && typeof mode === 'number' && (
                       <ReferenceLine
@@ -1198,7 +1259,7 @@ const Lab3_1 = ({ goHome, setView }) => {
                         stroke="#f472b6"
                         strokeWidth={2.5}
                         label={{
-                          value: `Mo=${mode.toFixed(2)}`,
+                          value: `Mo=${mode.toFixed(1)}`,
                           position: 'bottom',
                           fill: '#f472b6',
                           fontWeight: 700,
@@ -1207,15 +1268,6 @@ const Lab3_1 = ({ goHome, setView }) => {
                       />
                     )}
 
-                    {showMode && mode && Array.isArray(mode) && mode.slice(0, 3).map((m, i) => (
-                      <ReferenceLine
-                        key={i}
-                        x={m}
-                        stroke="#f472b6"
-                        strokeWidth={2.5}
-                        label={{ value: `Mo=${m.toFixed(2)}`, position: 'bottom', fill: '#f472b6', fontWeight: 700, fontSize: 11, offset: i * 15 }}
-                      />
-                    ))}
                   </ComposedChart>
                 </ResponsiveContainer>
 
@@ -1309,16 +1361,13 @@ const Lab3_1 = ({ goHome, setView }) => {
                   <ol className="space-y-2 text-sm text-slate-300">
                     <li className="flex items-start gap-2">
                       <span className="font-black text-green-400 mt-0.5">1.</span>
-                      <span>Primero ve a la pestaña <strong className="text-white">Calculadora</strong> y selecciona un dataset (o sube tu propio archivo)</span>
+                      <span>Primero ve a la pestaña <strong className="text-white">Datasets</strong> y selecciona un dataset (o sube tu propio archivo)</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="font-black text-green-400 mt-0.5">2.</span>
-                      <span>Analiza la distribución y responde las preguntas conceptuales</span>
+                      <span>Analiza la distribución y responde las preguntas conceptuales en esta pestaña basándote en lo que observas.</span>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <span className="font-black text-green-400 mt-0.5">3.</span>
-                      <span><strong className="text-white">Calcula manualmente</strong> la media, mediana y moda (puedes usar calculadora)</span>
-                    </li>
+
                     <li className="flex items-start gap-2">
                       <span className="font-black text-green-400 mt-0.5">4.</span>
                       <span>Haz clic en <strong className="text-white">"Verificar"</strong> para ver qué tan cerca estuviste</span>
@@ -1360,11 +1409,11 @@ const Lab3_1 = ({ goHome, setView }) => {
                   <Database className="w-12 h-12 mx-auto mb-3 text-indigo-400" />
                   <h4 className="font-black text-white mb-2">No hay dataset seleccionado</h4>
                   <p className="text-sm text-slate-400 mb-4">
-                    Ve a la pestaña <strong className="text-white">Calculadora</strong> y selecciona un dataset para empezar
+                    Ve a la pestaña <strong className="text-white">Datasets</strong> y selecciona un dataset para empezar
                   </p>
-                  <button onClick={() => setActiveTab('calculator')} className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white text-sm flex items-center gap-2 mx-auto transition-all">
+                  <button onClick={() => setActiveTab('datasets')} className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white text-sm flex items-center gap-2 mx-auto transition-all">
                     <ArrowRight className="w-4 h-4" />
-                    Ir a Calculadora
+                    Ir a Datasets
                   </button>
                 </div>
               ) : (
@@ -1454,21 +1503,6 @@ const Lab3_1 = ({ goHome, setView }) => {
                   </div>
 
                   <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-5">
-                    <h4 className="font-black text-white mb-3 text-sm">Calcula los valores (2 decimales)</h4>
-
-                    <div className="grid grid-cols-1 gap-3">
-                      {[
-                        { k: 'mean', label: 'Media (μ)' },
-                        { k: 'median', label: 'Mediana (Me)' },
-                        { k: 'mode', label: 'Moda (Mo)' },
-                      ].map(f => (
-                        <div key={f.k} className="flex items-center gap-3">
-                          <div className="w-28 text-xs font-black text-slate-300">{f.label}</div>
-                          <input value={appliedInputs[f.k]} onChange={(e) => setAppliedInputs(s => ({ ...s, [f.k]: e.target.value }))} placeholder="Ej. 13.50" className="flex-1 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white" />
-                        </div>
-                      ))}
-                    </div>
-
                     <div className="mt-4 flex gap-2">
                       <button onClick={checkApplied} className="px-5 py-3 bg-green-500 hover:bg-green-600 rounded-xl font-black text-white text-sm flex items-center gap-2 transition-all">
                         <CheckCircle className="w-4 h-4" />
@@ -1637,7 +1671,7 @@ const Lab3_1 = ({ goHome, setView }) => {
           <h3 className="text-2xl font-black text-white mb-2">Comparación Visual</h3>
           <p className="text-sm text-slate-400 mb-6">Distribución: <strong className="text-indigo-400">{dist}</strong></p>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={compData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+            <BarChart data={compData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }} >
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
               <XAxis dataKey="measure" tick={{ fill: '#94a3b8', fontSize: 12, fontWeight: 700 }} />
               <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
@@ -1646,7 +1680,7 @@ const Lab3_1 = ({ goHome, setView }) => {
                   return (
                     <div className="bg-slate-900/95 border border-slate-700 rounded-lg px-4 py-2">
                       <p className="text-white font-bold">{payload[0].payload.measure}</p>
-                      <p className="text-indigo-400">Valor: {payload[0].value.toFixed(2)}</p>
+                      <p className="text-indigo-400">Valor: {payload[0].value.toFixed(1)}</p>
                       {payload[0].payload.note && <p className="text-pink-400 text-xs mt-1">{payload[0].payload.note}</p>}
                     </div>
                   );
@@ -1665,7 +1699,7 @@ const Lab3_1 = ({ goHome, setView }) => {
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-lg shadow-lg" style={{ background: `linear-gradient(135deg, ${item.color}, ${item.color}99)` }}>{item.icon}</div>
                 <div><h4 className="font-black text-white">{item.measure}</h4>{item.note && <p className="text-xs text-pink-400">{item.note}</p>}</div>
               </div>
-              <div className="text-4xl font-black mb-2" style={{ color: item.color }}>{item.value.toFixed(2)}</div>
+              <div className="text-4xl font-black mb-2" style={{ color: item.color }}>{item.value.toFixed(1)}</div>
               <div className="text-xs text-slate-500">
                 {item.measure === 'Media' && 'Promedio aritmético'}
                 {item.measure === 'Mediana' && 'Valor central (50%)'}
@@ -1680,7 +1714,7 @@ const Lab3_1 = ({ goHome, setView }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-slate-900/50 rounded-xl p-4">
               <p className="text-xs text-slate-400 uppercase font-bold mb-1">Diferencia Media-Mediana</p>
-              <p className="text-2xl font-black text-cyan-400">{diff.toFixed(2)}</p>
+              <p className="text-2xl font-black text-cyan-400">{diff.toFixed(1)}</p>
               <p className="text-xs text-slate-500 mt-1">{diff < 0.5 ? '✅ Distribución simétrica' : '⚠️ Distribución sesgada'}</p>
             </div>
             <div className="bg-slate-900/50 rounded-xl p-4">
@@ -1702,7 +1736,131 @@ const Lab3_1 = ({ goHome, setView }) => {
       </div>
     );
   };
+  const renderCalculatorTab2 = () => {
+    // 🔹 CALCULAR desde manualData, NO desde activeData
+    const numericData = manualData
+      .map(v => parseFloat(v))
+      .filter(v => !isNaN(v));
 
+    // MEDIA
+    const manualMean = numericData.length > 0
+      ? numericData.reduce((a, b) => a + b, 0) / numericData.length
+      : null;
+
+    // MEDIANA
+    const manualMedian = (() => {
+      if (numericData.length === 0) return null;
+      const sorted = [...numericData].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 !== 0
+        ? sorted[mid]
+        : (sorted[mid - 1] + sorted[mid]) / 2;
+    })();
+
+    // MODA
+    const manualMode = (() => {
+      if (numericData.length === 0) return "-";
+      const freq = {};
+      numericData.forEach(n => {
+        freq[n] = (freq[n] || 0) + 1;
+      });
+      const maxFreq = Math.max(...Object.values(freq));
+      if (maxFreq === 1) return "No hay moda";
+      return Object.keys(freq)
+        .filter(k => freq[k] === maxFreq)
+        .join(", ");
+    })();
+
+    return (
+      <div className="space-y-8">
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
+          <h3 className="text-2xl font-black text-white mb-2">
+            Calculadora de Medidas de Tendencia Central
+          </h3>
+
+          <p className="text-slate-400 mb-6">
+            Ingresa entre 5 y 8 valores numéricos y observa cómo cambian la media,
+            mediana y moda en tiempo real.
+          </p>
+
+          {/* INPUTS */}
+          <div className="grid grid-cols-5 gap-4 mb-6">
+            {manualData.map((value, index) => (
+              <input
+                key={index}
+                type="number"
+                value={value}
+                onChange={(e) => {
+                  const newData = [...manualData];
+                  newData[index] = e.target.value;
+                  setManualData(newData);
+                }}
+                placeholder={`Valor ${index + 1}`}
+                className="bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-center font-bold focus:border-indigo-500 focus:outline-none transition-all"
+              />
+            ))}
+          </div>
+
+          {/* BOTONES */}
+          <div className="flex gap-3 mb-8 flex-wrap">
+            {/* Agregar dato */}
+            {manualData.length < 8 && (
+              <button
+                onClick={() => setManualData([...manualData, ""])}
+                className="px-5 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white text-sm transition-all"
+              >
+                + Agregar valor
+              </button>
+            )}
+
+            {/* Reiniciar */}
+            <button
+              onClick={() => setManualData(["", "", "", "", ""])}
+              className="px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-black text-slate-200 text-sm transition-all"
+            >
+              Reiniciar
+            </button>
+          </div>
+
+          {/* RESULTADOS */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-indigo-500/20 border border-indigo-500/30 rounded-2xl p-6 text-center">
+              <p className="text-sm text-slate-300 mb-1">Media (μ)</p>
+              <p className="text-3xl font-black text-white">
+                {manualMean !== null ? manualMean.toFixed(2) : "-"}
+              </p>
+            </div>
+
+            <div className="bg-purple-500/20 border border-purple-500/30 rounded-2xl p-6 text-center">
+              <p className="text-sm text-slate-300 mb-1">Mediana (Me)</p>
+              <p className="text-3xl font-black text-white">
+                {manualMedian !== null ? manualMedian.toFixed(2) : "-"}
+              </p>
+            </div>
+
+            <div className="bg-pink-500/20 border border-pink-500/30 rounded-2xl p-6 text-center">
+              <p className="text-sm text-slate-300 mb-1">Moda (Mo)</p>
+              <p className="text-3xl font-black text-white">
+                {manualMode}
+              </p>
+            </div>
+          </div>
+
+          {/* INFORMACIÓN ADICIONAL */}
+          {numericData.length > 0 && (
+            <div className="mt-6 p-4 bg-slate-800/30 rounded-xl border border-slate-700">
+              <p className="text-sm text-slate-400">
+                <strong className="text-white">Valores ingresados:</strong> {numericData.length} de {manualData.length}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Dataset: [{numericData.join(", ")}]
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -1763,9 +1921,11 @@ const Lab3_1 = ({ goHome, setView }) => {
         <div className="flex gap-3 border-b border-white/10 pb-4 flex-wrap">
           {[
             { id: 'intro', label: 'Introducción', icon: Info },
-            { id: 'calculator', label: 'Calculadora', icon: Calculator },
+            { id: 'datasets', label: 'Dataset', icon: Database },
             { id: 'practice', label: 'Práctica', icon: Brain },
-            { id: 'comparison', label: 'Comparación', icon: Activity }
+            { id: 'comparison', label: 'Comparación', icon: Activity },
+            { id: 'calculator', label: 'Calculadora', icon: Calculator },
+
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${activeTab === tab.id ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}>
               <tab.icon className="w-4 h-4" />{tab.label}
@@ -1774,9 +1934,10 @@ const Lab3_1 = ({ goHome, setView }) => {
         </div>
 
         {activeTab === 'intro' && renderIntroTab()}
-        {activeTab === 'calculator' && renderCalculatorTab()}
+        {activeTab === 'datasets' && renderCalculatorTab()}
         {activeTab === 'practice' && renderPracticeTab()}
         {activeTab === 'comparison' && renderComparisonTab()}
+        {activeTab === 'calculator' && renderCalculatorTab2()}
       </main>
     </div>
   );
