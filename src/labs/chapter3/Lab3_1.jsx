@@ -1608,7 +1608,7 @@ const Lab3_1 = ({ goHome, setView }) => {
                     <div className="flex-1">
                       <p className="font-black text-white">
                         {appliedFeedback.ok ? '¡Excelente!' : 'Casi — revisa esto:'}
-                        <span className="ml-2 text-slate-400 font-bold text-sm">Puntaje: {appliedFeedback.score}/9</span>
+                        <span className="ml-2 text-slate-400 font-bold text-sm">Puntaje: {appliedFeedback.score}/{appliedFeedback.totalQuestions}</span>
                       </p>
                       <p className="text-sm text-slate-300 mt-2">
                         <span className="text-indigo-300 font-black">Distribución:</span> {appliedFeedback.real.dist} ·
