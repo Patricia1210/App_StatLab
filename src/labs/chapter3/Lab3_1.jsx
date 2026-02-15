@@ -1603,7 +1603,7 @@ const Lab3_1 = ({ goHome, setView }) => {
 
               {appliedFeedback && (
                 <div className={`mt-6 p-5 rounded-xl border ${appliedFeedback.ok ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'}`}>
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3 mb-4">
                     {appliedFeedback.ok ? <CheckCircle className="w-5 h-5 text-green-400 mt-0.5" /> : <AlertCircle className="w-5 h-5 text-orange-400 mt-0.5" />}
                     <div className="flex-1">
                       <p className="font-black text-white">
@@ -1619,6 +1619,67 @@ const Lab3_1 = ({ goHome, setView }) => {
                         <span className="text-purple-300 font-black"> Me:</span> {appliedFeedback.real.median} ·
                         <span className="text-pink-300 font-black"> Mo:</span> {appliedFeedback.real.mode || 'Sin moda'}
                       </p>
+                    </div>
+                  </div>
+
+                  {/* 🔹 NUEVO: Desglose detallado de respuestas */}
+                  <div className="space-y-2 mt-4 pt-4 border-t border-white/10">
+                    <h4 className="text-xs font-black text-slate-400 uppercase mb-3">Desglose de respuestas</h4>
+
+                    {/* Pregunta 1: Distribución */}
+                    <div className={`flex items-center justify-between p-3 rounded-lg ${appliedFeedback.details.distOk ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                      <div className="flex items-center gap-2">
+                        {appliedFeedback.details.distOk ?
+                          <CheckCircle className="w-4 h-4 text-green-400" /> :
+                          <XCircle className="w-4 h-4 text-red-400" />
+                        }
+                        <span className="text-sm font-bold text-white">Forma de la distribución</span>
+                      </div>
+                      <span className={`text-xs font-bold ${appliedFeedback.details.distOk ? 'text-green-400' : 'text-red-400'}`}>
+                        {appliedFeedback.details.distOk ? '✓' : `✗ (Real: ${appliedFeedback.real.dist})`}
+                      </span>
+                    </div>
+
+                    {/* Pregunta 2: CV */}
+                    <div className={`flex items-center justify-between p-3 rounded-lg ${appliedFeedback.details.cvOk ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                      <div className="flex items-center gap-2">
+                        {appliedFeedback.details.cvOk ?
+                          <CheckCircle className="w-4 h-4 text-green-400" /> :
+                          <XCircle className="w-4 h-4 text-red-400" />
+                        }
+                        <span className="text-sm font-bold text-white">Variabilidad (CV)</span>
+                      </div>
+                      <span className={`text-xs font-bold ${appliedFeedback.details.cvOk ? 'text-green-400' : 'text-red-400'}`}>
+                        {appliedFeedback.details.cvOk ? '✓' : `✗ (Real: ${appliedFeedback.real.cvCategory})`}
+                      </span>
+                    </div>
+
+                    {/* Pregunta 3: Mejor medida */}
+                    <div className={`flex items-center justify-between p-3 rounded-lg ${appliedFeedback.details.bestMeasureOk ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                      <div className="flex items-center gap-2">
+                        {appliedFeedback.details.bestMeasureOk ?
+                          <CheckCircle className="w-4 h-4 text-green-400" /> :
+                          <XCircle className="w-4 h-4 text-red-400" />
+                        }
+                        <span className="text-sm font-bold text-white">Mejor medida para el centro</span>
+                      </div>
+                      <span className={`text-xs font-bold ${appliedFeedback.details.bestMeasureOk ? 'text-green-400' : 'text-red-400'}`}>
+                        {appliedFeedback.details.bestMeasureOk ? '✓' : `✗ (Real: ${appliedFeedback.real.bestMeasure === 'mean' ? 'Media' : 'Mediana'})`}
+                      </span>
+                    </div>
+
+                    {/* Pregunta 4: Impacto outliers */}
+                    <div className={`flex items-center justify-between p-3 rounded-lg ${appliedFeedback.details.outImpactOk ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                      <div className="flex items-center gap-2">
+                        {appliedFeedback.details.outImpactOk ?
+                          <CheckCircle className="w-4 h-4 text-green-400" /> :
+                          <XCircle className="w-4 h-4 text-red-400" />
+                        }
+                        <span className="text-sm font-bold text-white">Impacto de eliminar outliers</span>
+                      </div>
+                      <span className={`text-xs font-bold ${appliedFeedback.details.outImpactOk ? 'text-green-400' : 'text-red-400'}`}>
+                        {appliedFeedback.details.outImpactOk ? '✓' : `✗ (Real: ${appliedFeedback.real.outImpactReal})`}
+                      </span>
                     </div>
                   </div>
                 </div>
