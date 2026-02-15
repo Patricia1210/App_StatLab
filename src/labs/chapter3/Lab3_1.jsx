@@ -508,82 +508,30 @@ const Lab3_1 = ({ goHome, setView }) => {
   };
 
   const checkApplied = () => {
-
     if (activeData.length === 0) {
       setAppliedFeedback({
         ok: false,
-        msg: "Primero selecciona un dataset en 'Calculadora'."
+        msg: "Primero selecciona un dataset en 'Datasets'."
       });
       return;
     }
 
+    // 🔹 Usar los estados ya calculados (mean, median, mode)
     const realMean = round2(mean);
     const realMedian = round2(median);
     const realMode = mode == null ? null : round2(mode);
 
-
-    const userMean = appliedInputs.mean === ''
-      ? null
-      : Number(parseFloat(appliedInputs.mean).toFixed(2));
-
-    const userMedian = appliedInputs.median === ''
-      ? null
-      : Number(parseFloat(appliedInputs.median).toFixed(2));
-
-    const userMode = appliedInputs.mode === ''
-      ? null
-      : Number(parseFloat(appliedInputs.mode).toFixed(2));
-
     const outCount = outlierInfo?.count || 0;
-    const dist = getDistributionType(mean, median);
-
     const distReal = getDistributionType(mean, median);
+
+    // Validar distribución
     const distOk =
-      appliedConcept.dist === 'simetrica' && distReal === 'simétrica' ||
-      appliedConcept.dist === 'sesgo_pos' && distReal === 'sesgada a la derecha' ||
-      appliedConcept.dist === 'sesgo_neg' && distReal === 'sesgada a la izquierda' ||
-      appliedConcept.dist === 'no_det' && distReal === 'desconocida';
+      (appliedConcept.dist === 'simetrica' && distReal === 'simétrica') ||
+      (appliedConcept.dist === 'sesgo_pos' && distReal === 'sesgada a la derecha') ||
+      (appliedConcept.dist === 'sesgo_neg' && distReal === 'sesgada a la izquierda') ||
+      (appliedConcept.dist === 'no_det' && distReal === 'desconocida');
 
-    // Convertir a números válidos
-    const numericData = manualData
-      .map(v => parseFloat(v))
-      .filter(v => !isNaN(v));
-
-    // MEDIA
-    const mean =
-      numericData.length > 0
-        ? numericData.reduce((a, b) => a + b, 0) / numericData.length
-        : null;
-
-    // MEDIANA
-    const median = (() => {
-      if (numericData.length === 0) return null;
-
-      const sorted = [...numericData].sort((a, b) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-
-      return sorted.length % 2 !== 0
-        ? sorted[mid]
-        : (sorted[mid - 1] + sorted[mid]) / 2;
-    })();
-
-    // MODA
-    const mode = (() => {
-      if (numericData.length === 0) return "-";
-
-      const freq = {};
-      numericData.forEach(n => {
-        freq[n] = (freq[n] || 0) + 1;
-      });
-
-      const maxFreq = Math.max(...Object.values(freq));
-      if (maxFreq === 1) return "No hay moda";
-
-      return Object.keys(freq)
-        .filter(k => freq[k] === maxFreq)
-        .join(", ");
-    })();
-
+    // Validar CV
     let cvCategory = null;
     if (cv == null) cvCategory = 'no_interpretable';
     else if (cv < 15) cvCategory = 'baja';
@@ -592,8 +540,9 @@ const Lab3_1 = ({ goHome, setView }) => {
 
     const cvOk = appliedConcept.cv === cvCategory;
 
+    // Validar mejor medida
     let predicted = { bestMeasure: null };
-    if (dist !== 'simétrica' || outCount > 0) {
+    if (distReal !== 'simétrica' || outCount > 0) {
       predicted.bestMeasure = 'median';
     } else {
       predicted.bestMeasure = 'mean';
@@ -601,6 +550,7 @@ const Lab3_1 = ({ goHome, setView }) => {
 
     const bestMeasureOk = appliedConcept.bestMeasure === predicted.bestMeasure;
 
+    // Validar impacto de outliers
     let outImpactReal;
     if (outlierInfo.count === 0) {
       outImpactReal = 'nada';
@@ -610,55 +560,29 @@ const Lab3_1 = ({ goHome, setView }) => {
 
     const outImpactOk = appliedConcept.outImpact === outImpactReal;
 
-    const predMeanVsMedianOk =
-      appliedPred.meanVsMedian == null ? false :
-        (appliedPred.meanVsMedian === 'mean_gt_median' && mean > median) ||
-        (appliedPred.meanVsMedian === 'mean_lt_median' && mean < median) ||
-        (appliedPred.meanVsMedian === 'approx_equal' && dist === 'simétrica');
-
-    const predOutliersOk =
-      appliedPred.hasOutliers == null ? false :
-        (appliedPred.hasOutliers === 'yes' && outCount > 0) ||
-        (appliedPred.hasOutliers === 'no' && outCount === 0);
-
-    const meanOk = withinTol(userMean, realMean);
-    const medianOk = withinTol(userMedian, realMedian);
-    const modeOk =
-      (realMode == null && userMode == null) ||
-      withinTol(userMode, realMode);
-
+    // Calcular score
     const score = [
       distOk,
       cvOk,
       bestMeasureOk,
-      outImpactOk,
-      predMeanVsMedianOk,
-      predOutliersOk,
-      meanOk,
-      medianOk,
-      modeOk
+      outImpactOk
     ].filter(Boolean).length;
 
     setAppliedFeedback({
-      ok: score >= 5,
+      ok: score >= 3, // Aprobar con 3/4 correctas
       score,
-      totalQuestions: 9,
+      totalQuestions: 4,
       details: {
         distOk,
         cvOk,
         bestMeasureOk,
-        outImpactOk,
-        predMeanVsMedianOk,
-        predOutliersOk,
-        meanOk,
-        medianOk,
-        modeOk
+        outImpactOk
       },
       real: {
         mean: realMean,
         median: realMedian,
         mode: realMode,
-        dist,
+        dist: distReal,
         outCount,
         cvCategory,
         bestMeasure: predicted.bestMeasure,
@@ -666,7 +590,6 @@ const Lab3_1 = ({ goHome, setView }) => {
       }
     });
   };
-
   const addOutlierShock = () => {
     if (activeData.length === 0) return;
     const max = Math.max(...activeData);
