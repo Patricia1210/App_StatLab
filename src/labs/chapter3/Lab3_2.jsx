@@ -3,12 +3,11 @@ import {
   ArrowLeft, Calculator, TrendingUp, Database, Eye, Download,
   Activity, Info, Upload, BarChart3, Lightbulb, AlertCircle,
   Settings, Target, Zap, CheckCircle, XCircle, Award, Brain,
-  Percent, Hash, ArrowRight, TrendingDown, Maximize2, Minimize2
+  Percent, Hash, ArrowRight, TrendingDown, Minimize2, Maximize2
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Cell, ReferenceLine, ComposedChart, Line, ScatterChart,
-  Scatter, Area, AreaChart
+  Tooltip, Cell, ReferenceLine, ComposedChart, Line
 } from "recharts";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
@@ -193,6 +192,30 @@ const calculateMedian = (data) => {
     : sorted[mid];
 };
 
+const calculateMode = (data) => {
+  if (!data || data.length === 0) return null;
+
+  const frequency = {};
+
+  // 🔹 Redondeamos a 2 decimales para evitar errores de precisión
+  data.forEach(val => {
+    const rounded = Number(parseFloat(val).toFixed(2));
+    frequency[rounded] = (frequency[rounded] || 0) + 1;
+  });
+
+  const maxFreq = Math.max(...Object.values(frequency));
+
+  // Si todos aparecen una sola vez → no hay moda
+  if (maxFreq === 1) return null;
+
+  const modes = Object.keys(frequency)
+    .filter(k => frequency[k] === maxFreq)
+    .map(Number);
+
+  // 🔹 Para visualización SOLO mostramos una
+  return modes.length > 0 ? modes[0] : null;
+};
+
 const calculateRange = (data) => {
   if (!data || data.length === 0) return null;
   return Math.max(...data) - Math.min(...data);
@@ -296,45 +319,6 @@ const round2 = (x) => (x == null ? null : Number(x.toFixed(2)));
 const withinTol = (a, b, tol = 0.1) =>
   a != null && b != null && Math.abs(a - b) <= tol;
 
-const calculateBinSize = (data, method = 'sturges') => {
-  if (!data || data.length < 2) return 1;
-
-  const n = data.length;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min;
-
-  if (range === 0) return 1;
-
-  const { iqr } = calculateQuartiles(data);
-  const std = calculateStdDev(data);
-
-  let binWidth;
-
-  switch (method) {
-    case 'sturges':
-      binWidth = range / (Math.ceil(Math.log2(n)) + 1);
-      break;
-
-    case 'fd':
-      if (!iqr || iqr === 0) return 1;
-      binWidth = 2 * iqr * Math.pow(n, -1 / 3);
-      break;
-
-    case 'scott':
-      if (!std || std === 0) return 1;
-      binWidth = 3.5 * std * Math.pow(n, -1 / 3);
-      break;
-
-    default:
-      binWidth = range / 20;
-  }
-
-  if (!isFinite(binWidth) || binWidth <= 0) return 1;
-
-  return binWidth;
-};
-
 // ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
@@ -355,6 +339,7 @@ const Lab3_2 = ({ goHome, setView }) => {
 
   const [mean, setMean] = useState(null);
   const [median, setMedian] = useState(null);
+  const [mode, setMode] = useState(null);
   const [range, setRange] = useState(null);
   const [variance, setVariance] = useState(null);
   const [stdDev, setStdDev] = useState(null);
@@ -372,21 +357,16 @@ const Lab3_2 = ({ goHome, setView }) => {
   const [show95Rule, setShow95Rule] = useState(false);
   const [yAxisType, setYAxisType] = useState('count');
   const [binMethod, setBinMethod] = useState('sturges');
-  const [binSize, setBinSize] = useState('auto');
   const [colorPalette, setColorPalette] = useState('modern');
   const [chartKey, setChartKey] = useState(0);
+  const [numIntervals, setNumIntervals] = useState(10);
+  const [chartBgColor, setChartBgColor] = useState('transparent');
 
   const [practiceAnswers, setPracticeAnswers] = useState({});
   const [practiceResults, setPracticeResults] = useState({});
   const [practiceScore, setPracticeScore] = useState(0);
 
   const [practiceMode, setPracticeMode] = useState('applied');
-  const [appliedInputs, setAppliedInputs] = useState({
-    range: '',
-    variance: '',
-    stdDev: '',
-    iqr: ''
-  });
   const [appliedConcept, setAppliedConcept] = useState({
     variability: null,
     cvLevel: null,
@@ -395,12 +375,16 @@ const Lab3_2 = ({ goHome, setView }) => {
   });
   const [appliedFeedback, setAppliedFeedback] = useState(null);
 
+  // 🔹 NUEVO: Estados para la calculadora manual
+  const [manualData, setManualData] = useState(["", "", "", "", ""]);
+
   const chartRef = useRef(null);
 
   useEffect(() => {
     if (activeData.length > 0) {
       const m = calculateMean(activeData);
       const med = calculateMedian(activeData);
+      const mod = calculateMode(activeData);
       const r = calculateRange(activeData);
       const v = calculateVariance(activeData);
       const sd = calculateStdDev(activeData);
@@ -410,6 +394,7 @@ const Lab3_2 = ({ goHome, setView }) => {
 
       setMean(m);
       setMedian(med);
+      setMode(mod);
       setRange(r);
       setVariance(v);
       setStdDev(sd);
@@ -419,6 +404,10 @@ const Lab3_2 = ({ goHome, setView }) => {
       setInterpretation(interpretDispersion(sd, cvVal, q.iqr, r, activeData));
     }
   }, [activeData]);
+
+  // ============================================
+  // HANDLERS Y FUNCIONES AUXILIARES
+  // ============================================
 
   const handleDatasetSelect = (key) => {
     setSelectedDataset(key);
@@ -525,20 +514,12 @@ const Lab3_2 = ({ goHome, setView }) => {
     if (activeData.length === 0) {
       setAppliedFeedback({
         ok: false,
-        msg: "Primero selecciona un dataset en 'Calculadora'."
+        msg: "Primero selecciona un dataset en 'Datasets'."
       });
       return;
     }
 
-    const realRange = round2(range);
-    const realVariance = round2(variance);
-    const realStdDev = round2(stdDev);
-    const realIQR = round2(quartiles.iqr);
-
-    const userRange = appliedInputs.range === '' ? null : Number(parseFloat(appliedInputs.range).toFixed(2));
-    const userVariance = appliedInputs.variance === '' ? null : Number(parseFloat(appliedInputs.variance).toFixed(2));
-    const userStdDev = appliedInputs.stdDev === '' ? null : Number(parseFloat(appliedInputs.stdDev).toFixed(2));
-    const userIQR = appliedInputs.iqr === '' ? null : Number(parseFloat(appliedInputs.iqr).toFixed(2));
+    const outCount = outlierInfo?.count || 0;
 
     let cvCategory = null;
     if (cv == null) cvCategory = 'no_interpretable';
@@ -573,41 +554,28 @@ const Lab3_2 = ({ goHome, setView }) => {
 
     const outlierEffectOk = appliedConcept.outlierEffect === outlierEffectReal;
 
-    const rangeOk = withinTol(userRange, realRange, realRange * 0.05);
-    const varianceOk = withinTol(userVariance, realVariance, realVariance * 0.1);
-    const stdDevOk = withinTol(userStdDev, realStdDev, realStdDev * 0.1);
-    const iqrOk = withinTol(userIQR, realIQR, realIQR * 0.1);
-
     const score = [
       cvOk,
       variabilityOk,
       bestMeasureOk,
-      outlierEffectOk,
-      rangeOk,
-      varianceOk,
-      stdDevOk,
-      iqrOk
+      outlierEffectOk
     ].filter(Boolean).length;
 
     setAppliedFeedback({
-      ok: score >= 5,
+      ok: score >= 3,
       score,
-      totalQuestions: 8,
+      totalQuestions: 4,
       details: {
         cvOk,
         variabilityOk,
         bestMeasureOk,
-        outlierEffectOk,
-        rangeOk,
-        varianceOk,
-        stdDevOk,
-        iqrOk
+        outlierEffectOk
       },
       real: {
-        range: realRange,
-        variance: realVariance,
-        stdDev: realStdDev,
-        iqr: realIQR,
+        range: round2(range),
+        variance: round2(variance),
+        stdDev: round2(stdDev),
+        iqr: round2(quartiles.iqr),
         cvCategory,
         variabilityReal,
         bestMeasureReal,
@@ -647,6 +615,13 @@ const Lab3_2 = ({ goHome, setView }) => {
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
+  const getTextColor = (bgColor) => {
+    if (bgColor === '#ffffff' || bgColor === '#f5f5f5' || bgColor === '#e5e5e5') {
+      return '#000000';
+    }
+    return '#ffffff';
+  };
+
   const prepareHistogramData = () => {
     if (activeData.length === 0) return { bins: [] };
 
@@ -667,11 +642,7 @@ const Lab3_2 = ({ goHome, setView }) => {
       };
     }
 
-    const actualBinSize = binSize === 'auto'
-      ? calculateBinSize(activeData, binMethod)
-      : Math.max(1e-9, parseFloat(binSize));
-
-    const numBins = Math.max(5, Math.min(30, Math.ceil(rangeVal / actualBinSize)));
+    const numBins = numIntervals;
     const binWidth = rangeVal / numBins;
 
     const bins = Array.from({ length: numBins }, (_, i) => ({
@@ -701,6 +672,10 @@ const Lab3_2 = ({ goHome, setView }) => {
 
     return { bins };
   };
+
+  // ============================================
+  // RENDER: INTRODUCCIÓN
+  // ============================================
 
   const renderIntroTab = () => (
     <div className="space-y-8">
@@ -890,8 +865,11 @@ const Lab3_2 = ({ goHome, setView }) => {
       </div>
     </div>
   );
+  // ============================================
+  // RENDER: PESTAÑA DATASETS (antes "Calculadora")
+  // ============================================
 
-  const renderCalculatorTab = () => {
+  const renderDatasetsTab = () => {
     const { bins } = prepareHistogramData();
     const currentColors = PALETTES[colorPalette].colors;
     const displayValue = yAxisType === 'percent' ? 'relFreq' : 'count';
@@ -902,7 +880,7 @@ const Lab3_2 = ({ goHome, setView }) => {
           <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
             <h3 className="text-lg font-black text-white mb-4 flex items-center gap-2">
               <Database className="w-5 h-5 text-indigo-400" />
-              Datasets
+              Datasets Clásicos
             </h3>
             <div className="space-y-3 mb-4">
               {Object.entries(PRESET_DATASETS).map(([key, ds]) => {
@@ -1050,20 +1028,38 @@ const Lab3_2 = ({ goHome, setView }) => {
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Método bins</label>
-                  <select value={binMethod} onChange={(e) => { setBinMethod(e.target.value); setBinSize('auto'); setChartKey(p => p + 1); }} className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white">
-                    <option value="sturges">Sturges</option>
-                    <option value="fd">Freedman-Diaconis</option>
-                    <option value="scott">Scott</option>
-                  </select>
-                </div>
-
-                <div>
                   <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Colores</label>
                   <select value={colorPalette} onChange={(e) => setColorPalette(e.target.value)} className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white">
                     {Object.entries(PALETTES).map(([k, p]) => <option key={k} value={k}>{p.name}</option>)}
                   </select>
                   <div className="flex gap-1 mt-2">{PALETTES[colorPalette].colors.map((c, i) => <div key={i} className="h-6 flex-1 rounded" style={{ backgroundColor: c }} />)}</div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase block mb-2">
+                    Fondo del gráfico
+                  </label>
+                  <select
+                    value={chartBgColor}
+                    onChange={(e) => {
+                      setChartBgColor(e.target.value);
+                      setChartKey(p => p + 1);
+                    }}
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white"
+                  >
+                    <option value="transparent">Transparente</option>
+                    <option value="#ffffff">Blanco</option>
+                    <option value="#f5f5f5">Gris Claro</option>
+                    <option value="#e5e5e5">Crema</option>
+                    <option value="#1e293b">Pizarra</option>
+                    <option value="#000000">Negro</option>
+                  </select>
+
+                  <div className="mt-3 p-4 rounded-lg border border-slate-700" style={{ backgroundColor: chartBgColor }}>
+                    <p className="text-xs text-center font-bold" style={{ color: getTextColor(chartBgColor) }}>
+                      Vista previa del fondo
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1091,40 +1087,56 @@ const Lab3_2 = ({ goHome, setView }) => {
                 </div>
               </div>
             ) : (
-              <div ref={chartRef} key={chartKey}>
+              <div
+                ref={chartRef}
+                key={chartKey}
+                style={{ backgroundColor: chartBgColor }}
+                className="rounded-xl p-4"
+              >
                 <div className="mb-4 text-center">
-                  <h4 className="text-lg font-bold text-white">{chartTitle}</h4>
+                  <h4 className="text-lg font-bold" style={{ color: getTextColor(chartBgColor) }}>
+                    {chartTitle}
+                  </h4>
                   <p className="text-xs text-slate-500 mt-1">
-                    n = {activeData.length} | Rango: {Math.min(...activeData).toFixed(2)} - {Math.max(...activeData).toFixed(2)} {dataUnit}
+                    n = {activeData.length} | Rango: {Math.min(...activeData).toFixed(1)} - {Math.max(...activeData).toFixed(1)} {dataUnit}
                   </p>
                 </div>
 
+                <div className="flex items-center gap-3 mb-4">
+                  <label className="text-sm text-slate-300 font-bold">
+                    Intervalos:
+                  </label>
+                  <select
+                    value={numIntervals}
+                    onChange={(e) => {
+                      setNumIntervals(Number(e.target.value));
+                      setChartKey(prev => prev + 1);
+                    }}
+                    className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
+                  >
+                    <option value={3}>3</option>
+                    <option value={5}>5</option>
+                    <option value={7}>7</option>
+                    <option value={10}>10</option>
+                    <option value={15}>15</option>
+                  </select>
+                </div>
+
                 <ResponsiveContainer width="100%" height={500}>
-                  <ComposedChart data={bins} margin={{ top: 40, right: 30, left: 60, bottom: 80 }}>
+                  <ComposedChart data={bins} margin={{ top: 40, right: 30, left: 60, bottom: 80 }} barCategoryGap="0%" barGap={"0%"}>
                     <defs>
                       <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor={currentColors[0]} stopOpacity={0.8} />
                         <stop offset="100%" stopColor={currentColors[0]} stopOpacity={0.3} />
                       </linearGradient>
-                      {show68Rule && (
-                        <linearGradient id="area68" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
-                          <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
-                        </linearGradient>
-                      )}
-                      {show95Rule && (
-                        <linearGradient id="area95" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#a855f7" stopOpacity={0.2} />
-                          <stop offset="100%" stopColor="#a855f7" stopOpacity={0.02} />
-                        </linearGradient>
-                      )}
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
                     <XAxis
                       dataKey="center"
                       type="number"
-                      domain={['dataMin - 1', 'dataMax + 1']}
+                      domain={[bins.length ? bins[0].start : 0, bins.length ? bins[bins.length - 1].end : 0]}
                       tick={{ fill: '#94a3b8', fontSize: 11 }}
+                      tickFormatter={(val) => val.toFixed(1)}
                       label={{
                         value: xLabel,
                         position: 'insideBottom',
@@ -1134,8 +1146,9 @@ const Lab3_2 = ({ goHome, setView }) => {
                     />
                     <YAxis
                       tick={{ fill: '#94a3b8', fontSize: 11 }}
+                      tickFormatter={(val) => val.toFixed(1)}
                       label={{
-                        value: yLabel,
+                        value: yAxisType === 'count' ? 'Frecuencia' : 'Porcentaje (%)',
                         angle: -90,
                         position: 'insideLeft',
                         style: { fill: '#cbd5e1', fontWeight: 700, fontSize: 12 }
@@ -1146,7 +1159,7 @@ const Lab3_2 = ({ goHome, setView }) => {
                         const d = payload[0].payload;
                         return (
                           <div className="bg-slate-900/95 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
-                            <p className="text-white font-bold text-xs mb-1">{d.start.toFixed(2)} - {d.end.toFixed(2)} {dataUnit}</p>
+                            <p className="text-white font-bold text-xs mb-1">{d.start.toFixed(1)} - {d.end.toFixed(1)} {dataUnit}</p>
                             <p className="text-indigo-400 text-sm">Frecuencia: {d.count}</p>
                             <p className="text-purple-400 text-xs">{d.relFreq}% del total</p>
                             {d.hasOutliers && <p className="text-orange-400 text-xs font-bold mt-1">⚠️ Contiene outliers</p>}
@@ -1156,7 +1169,7 @@ const Lab3_2 = ({ goHome, setView }) => {
                       return null;
                     }} />
 
-                    <Bar dataKey={displayValue} fill="url(#barGrad)" barCategoryGap={0} barGap={0}>
+                    <Bar dataKey={displayValue} fill="url(#barGrad)" barSize={undefined}>
                       {bins.map((entry, idx) => (
                         <Cell key={idx} fill={entry.hasOutliers ? '#f59e0b' : currentColors[idx % currentColors.length]} opacity={entry.hasOutliers ? 1 : 0.8} />
                       ))}
@@ -1227,9 +1240,51 @@ const Lab3_2 = ({ goHome, setView }) => {
 
                     {showQuartiles && (
                       <>
-                        {quartiles.q1 && <ReferenceLine x={quartiles.q1} stroke="#10b981" strokeWidth={2} label={{ value: `Q1`, position: 'bottom', fill: '#10b981', fontSize: 10 }} />}
-                        {quartiles.q2 && <ReferenceLine x={quartiles.q2} stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" label={{ value: `Q2`, position: 'bottom', fill: '#10b981', fontSize: 10, offset: 15 }} />}
-                        {quartiles.q3 && <ReferenceLine x={quartiles.q3} stroke="#10b981" strokeWidth={2} label={{ value: `Q3`, position: 'bottom', fill: '#10b981', fontSize: 10, offset: 30 }} />}
+                        {quartiles.q1 && (
+                          <ReferenceLine
+                            x={quartiles.q1}
+                            stroke="#10b981"
+                            strokeWidth={2}
+                            label={{
+                              value: `Q1=${quartiles.q1.toFixed(1)}`,
+                              position: 'top',
+                              fill: '#10b981',
+                              fontSize: 10,
+                              fontWeight: 700
+                            }}
+                          />
+                        )}
+                        {quartiles.q2 && (
+                          <ReferenceLine
+                            x={quartiles.q2}
+                            stroke="#10b981"
+                            strokeWidth={2}
+                            strokeDasharray="5 5"
+                            label={{
+                              value: `Q2=${quartiles.q2.toFixed(1)}`,
+                              position: 'top',
+                              fill: '#10b981',
+                              fontSize: 10,
+                              fontWeight: 700,
+                              offset: 15
+                            }}
+                          />
+                        )}
+                        {quartiles.q3 && (
+                          <ReferenceLine
+                            x={quartiles.q3}
+                            stroke="#10b981"
+                            strokeWidth={2}
+                            label={{
+                              value: `Q3=${quartiles.q3.toFixed(1)}`,
+                              position: 'top',
+                              fill: '#10b981',
+                              fontSize: 10,
+                              fontWeight: 700,
+                              offset: 30
+                            }}
+                          />
+                        )}
                       </>
                     )}
 
@@ -1321,6 +1376,158 @@ const Lab3_2 = ({ goHome, setView }) => {
     );
   };
 
+  // ============================================
+  // RENDER: PESTAÑA CALCULADORA MANUAL
+  // ============================================
+
+  const renderCalculatorManualTab = () => {
+    const numericData = manualData
+      .map(v => parseFloat(v))
+      .filter(v => !isNaN(v));
+
+    const manualMean = numericData.length > 0
+      ? numericData.reduce((a, b) => a + b, 0) / numericData.length
+      : null;
+
+    const manualMedian = (() => {
+      if (numericData.length === 0) return null;
+      const sorted = [...numericData].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 !== 0
+        ? sorted[mid]
+        : (sorted[mid - 1] + sorted[mid]) / 2;
+    })();
+
+    const manualMode = (() => {
+      if (numericData.length === 0) return "-";
+      const freq = {};
+      numericData.forEach(n => {
+        const rounded = Number(parseFloat(n).toFixed(2));
+        freq[rounded] = (freq[rounded] || 0) + 1;
+      });
+      const maxFreq = Math.max(...Object.values(freq));
+      if (maxFreq === 1) return "No hay moda";
+      return Object.keys(freq)
+        .filter(k => freq[k] === maxFreq)
+        .join(", ");
+    })();
+
+    const manualRange = numericData.length > 0
+      ? Math.max(...numericData) - Math.min(...numericData)
+      : null;
+
+    const manualVariance = numericData.length >= 2
+      ? numericData.reduce((sum, x) => sum + Math.pow(x - manualMean, 2), 0) / (numericData.length - 1)
+      : null;
+
+    const manualStdDev = manualVariance !== null
+      ? Math.sqrt(manualVariance)
+      : null;
+
+    return (
+      <div className="space-y-8">
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
+          <h3 className="text-2xl font-black text-white mb-2">
+            Calculadora de Medidas
+          </h3>
+          <p className="text-slate-400 mb-6">
+            Ingresa entre 5 y 8 valores numéricos y observa cómo cambian las medidas en tiempo real.
+          </p>
+
+          <div className="grid grid-cols-5 gap-4 mb-6">
+            {manualData.map((value, index) => (
+              <input
+                key={index}
+                type="number"
+                value={value}
+                onChange={(e) => {
+                  const newData = [...manualData];
+                  newData[index] = e.target.value;
+                  setManualData(newData);
+                }}
+                placeholder={`Valor ${index + 1}`}
+                className="bg-slate-800 border border-slate-600 rounded-xl p-3 text-white text-center font-bold focus:border-indigo-500 focus:outline-none transition-all"
+              />
+            ))}
+          </div>
+
+          <div className="flex gap-3 mb-8 flex-wrap">
+            {manualData.length < 8 && (
+              <button
+                onClick={() => setManualData([...manualData, ""])}
+                className="px-5 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white text-sm transition-all"
+              >
+                + Agregar valor
+              </button>
+            )}
+            <button
+              onClick={() => setManualData(["", "", "", "", ""])}
+              className="px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-black text-slate-200 text-sm transition-all"
+            >
+              Reiniciar
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="bg-indigo-500/20 border border-indigo-500/30 rounded-2xl p-6 text-center">
+              <p className="text-sm text-slate-300 mb-1">Media (μ)</p>
+              <p className="text-3xl font-black text-white">
+                {manualMean !== null ? manualMean.toFixed(2) : "-"}
+              </p>
+            </div>
+            <div className="bg-purple-500/20 border border-purple-500/30 rounded-2xl p-6 text-center">
+              <p className="text-sm text-slate-300 mb-1">Mediana (Me)</p>
+              <p className="text-3xl font-black text-white">
+                {manualMedian !== null ? manualMedian.toFixed(2) : "-"}
+              </p>
+            </div>
+            <div className="bg-pink-500/20 border border-pink-500/30 rounded-2xl p-6 text-center">
+              <p className="text-sm text-slate-300 mb-1">Moda (Mo)</p>
+              <p className="text-3xl font-black text-white">
+                {manualMode}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-blue-500/20 border border-blue-500/30 rounded-2xl p-6 text-center">
+              <p className="text-sm text-slate-300 mb-1">Rango (R)</p>
+              <p className="text-3xl font-black text-white">
+                {manualRange !== null ? manualRange.toFixed(2) : "-"}
+              </p>
+            </div>
+            <div className="bg-orange-500/20 border border-orange-500/30 rounded-2xl p-6 text-center">
+              <p className="text-sm text-slate-300 mb-1">Varianza (s²)</p>
+              <p className="text-3xl font-black text-white">
+                {manualVariance !== null ? manualVariance.toFixed(2) : "-"}
+              </p>
+            </div>
+            <div className="bg-cyan-500/20 border border-cyan-500/30 rounded-2xl p-6 text-center">
+              <p className="text-sm text-slate-300 mb-1">Desv. Std (s)</p>
+              <p className="text-3xl font-black text-white">
+                {manualStdDev !== null ? manualStdDev.toFixed(2) : "-"}
+              </p>
+            </div>
+          </div>
+
+          {numericData.length > 0 && (
+            <div className="mt-6 p-4 bg-slate-800/30 rounded-xl border border-slate-700">
+              <p className="text-sm text-slate-400">
+                <strong className="text-white">Valores ingresados:</strong> {numericData.length} de {manualData.length}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Dataset: [{numericData.join(", ")}]
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+  // ============================================
+  // RENDER: PESTAÑA PRÁCTICA (simplificada - solo conceptual)
+  // ============================================
+
   const renderPracticeTab = () => (
     <div className="space-y-6">
       <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-3xl p-8">
@@ -1353,19 +1560,19 @@ const Lab3_2 = ({ goHome, setView }) => {
                   <ol className="space-y-2 text-sm text-slate-300">
                     <li className="flex items-start gap-2">
                       <span className="font-black text-green-400 mt-0.5">1.</span>
-                      <span>Ve a la pestaña <strong className="text-white">Calculadora</strong> y selecciona un dataset</span>
+                      <span>Selecciona un dataset aquí mismo o ve a la pestaña <strong className="text-white">Datasets</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="font-black text-green-400 mt-0.5">2.</span>
-                      <span>Analiza la dispersión y responde las preguntas conceptuales</span>
+                      <span>Analiza la dispersión y responde las preguntas conceptuales basándote en lo que observas</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="font-black text-green-400 mt-0.5">3.</span>
-                      <span><strong className="text-white">Calcula manualmente</strong> rango, varianza, desv. estándar e IQR</span>
+                      <span>Haz clic en <strong className="text-white">"Verificar"</strong> para ver qué tan cerca estuviste</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="font-black text-green-400 mt-0.5">4.</span>
-                      <span>Haz clic en <strong className="text-white">"Verificar"</strong> para comparar con los valores reales</span>
+                      <span className="font-black text-orange-400 mt-0.5">💡</span>
+                      <span><strong className="text-orange-300">Desafío extra:</strong> Usa el botón "Agregar Outlier" para ver cómo cambian las medidas</span>
                     </li>
                   </ol>
                 </div>
@@ -1399,149 +1606,202 @@ const Lab3_2 = ({ goHome, setView }) => {
                 <div className="p-6 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border-2 border-indigo-500/20 rounded-xl text-center">
                   <Database className="w-12 h-12 mx-auto mb-3 text-indigo-400" />
                   <h4 className="font-black text-white mb-2">No hay dataset seleccionado</h4>
-                  <p className="text-sm text-slate-400 mb-4">
-                    Ve a la pestaña <strong className="text-white">Calculadora</strong> y selecciona un dataset
-                  </p>
-                  <button onClick={() => setActiveTab('calculator')} className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white text-sm flex items-center gap-2 mx-auto transition-all">
-                    <ArrowRight className="w-4 h-4" />
-                    Ir a Calculadora
-                  </button>
+                  <p className="text-sm text-slate-400 mb-4">Selecciona un dataset aquí mismo</p>
+
+                  <div className="mt-4 space-y-2">
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Datasets disponibles</label>
+                    {Object.entries(PRESET_DATASETS).map(([key, ds]) => {
+                      const Icon = ds.icon;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => handleDatasetSelect(key)}
+                          className="w-full p-3 rounded-lg border-2 border-slate-700 bg-slate-800/50 hover:border-indigo-500/50 transition-all text-left"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Icon className="w-4 h-4 text-slate-400" />
+                            <div className="flex-1">
+                              <div className="font-bold text-white text-sm">{ds.label}</div>
+                              <div className="text-xs text-slate-400">{ds.description}</div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    <h2 className="text-xl font-black text-white mb-4">Preguntas Conceptuales</h2>
+                <>
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700 rounded-xl p-4 mb-4">
+                    <h4 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-indigo-400" />
+                      Vista rápida de los datos
+                    </h4>
 
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-                          <span className="text-indigo-400 font-black">1</span>
-                        </div>
-                        <h4 className="font-bold text-white">Nivel de variabilidad</h4>
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-slate-400 mb-1">Rango</p>
+                        <p className="text-lg font-black text-blue-400">{range?.toFixed(2) || '-'}</p>
                       </div>
-                      <select
-                        value={appliedConcept.variability || ""}
-                        onChange={(e) => setAppliedConcept({ ...appliedConcept, variability: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-indigo-500 focus:outline-none transition-all"
-                      >
-                        <option value="">Selecciona</option>
-                        <option value="baja">Baja (s &lt; 2)</option>
-                        <option value="moderada">Moderada (2 ≤ s &lt; 5)</option>
-                        <option value="alta">Alta (s ≥ 5)</option>
-                      </select>
+                      <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-slate-400 mb-1">Desv. Std</p>
+                        <p className="text-lg font-black text-pink-400">{stdDev?.toFixed(2) || '-'}</p>
+                      </div>
+                      <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-slate-400 mb-1">IQR</p>
+                        <p className="text-lg font-black text-orange-400">{quartiles.iqr?.toFixed(2) || '-'}</p>
+                      </div>
                     </div>
 
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                          <span className="text-purple-400 font-black">2</span>
-                        </div>
-                        <h4 className="font-bold text-white">Coeficiente de Variación (CV)</h4>
+                    {/* 🔹 NUEVO: Mini gráfico */}
+                    <div className="bg-slate-900/50 rounded-lg p-3">
+                      <p className="text-xs text-slate-400 mb-2">Distribución rápida</p>
+                      <div className="flex items-end gap-1 h-20">
+                        {(() => {
+                          const { bins: quickBins } = prepareHistogramData();
+                          const maxCount = Math.max(...quickBins.map(b => b.count));
+                          return quickBins.slice(0, 10).map((bin, idx) => (
+                            <div
+                              key={idx}
+                              className="flex-1 bg-gradient-to-t from-indigo-500 to-purple-500 rounded-t"
+                              style={{
+                                height: `${(bin.count / maxCount) * 100}%`,
+                                opacity: 0.7
+                              }}
+                              title={`${bin.count} valores`}
+                            />
+                          ));
+                        })()}
                       </div>
-                      <select
-                        value={appliedConcept.cvLevel || ""}
-                        onChange={(e) => setAppliedConcept({ ...appliedConcept, cvLevel: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-purple-500 focus:outline-none transition-all"
-                      >
-                        <option value="">Selecciona</option>
-                        <option value="baja">Baja (&lt;15%)</option>
-                        <option value="moderada">Moderada (15-30%)</option>
-                        <option value="alta">Alta (≥30%)</option>
-                        <option value="no_interpretable">No interpretable</option>
-                      </select>
                     </div>
 
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center">
-                          <span className="text-pink-400 font-black">3</span>
-                        </div>
-                        <h4 className="font-bold text-white">Mejor medida para reportar dispersión</h4>
-                      </div>
-                      <select
-                        value={appliedConcept.bestMeasure || ""}
-                        onChange={(e) => setAppliedConcept({ ...appliedConcept, bestMeasure: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-pink-500 focus:outline-none transition-all"
-                      >
-                        <option value="">Selecciona</option>
-                        <option value="range">Rango</option>
-                        <option value="stddev">Desviación Estándar</option>
-                        <option value="iqr">IQR</option>
-                      </select>
-                    </div>
-
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                          <span className="text-orange-400 font-black">4</span>
-                        </div>
-                        <h4 className="font-bold text-white">¿Qué medida se afecta MÁS por outliers?</h4>
-                      </div>
-                      <select
-                        value={appliedConcept.outlierEffect || ""}
-                        onChange={(e) => setAppliedConcept({ ...appliedConcept, outlierEffect: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-orange-500 focus:outline-none transition-all"
-                      >
-                        <option value="">Selecciona</option>
-                        <option value="range">Rango</option>
-                        <option value="stddev">Desviación Estándar</option>
-                        <option value="iqr">IQR</option>
-                        <option value="ninguno">Ninguno (sin outliers)</option>
-                      </select>
-                    </div>
+                    <button
+                      onClick={() => setActiveTab('datasets')}
+                      className="mt-3 w-full px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 rounded-lg text-indigo-300 font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                    >
+                      <Database className="w-4 h-4" />
+                      Cambiar dataset
+                    </button>
                   </div>
 
-                  <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-5">
-                    <h4 className="font-black text-white mb-3 text-sm">Calcula los valores (2 decimales)</h4>
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <h2 className="text-xl font-black text-white mb-4">Práctica Aplicada</h2>
 
-                    <div className="grid grid-cols-1 gap-3">
-                      {[
-                        { k: 'range', label: 'Rango (R)' },
-                        { k: 'variance', label: 'Varianza (s²)' },
-                        { k: 'stdDev', label: 'Desv. Estándar (s)' },
-                        { k: 'iqr', label: 'IQR' },
-                      ].map(f => (
-                        <div key={f.k} className="flex items-center gap-3">
-                          <div className="w-32 text-xs font-black text-slate-300">{f.label}</div>
-                          <input
-                            value={appliedInputs[f.k]}
-                            onChange={(e) => setAppliedInputs(s => ({ ...s, [f.k]: e.target.value }))}
-                            placeholder="Ej. 6.67"
-                            className="flex-1 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white"
-                          />
+                      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                            <span className="text-indigo-400 font-black">1</span>
+                          </div>
+                          <h4 className="font-bold text-white">Nivel de variabilidad</h4>
                         </div>
-                      ))}
+                        <select
+                          value={appliedConcept.variability || ""}
+                          onChange={(e) => setAppliedConcept({ ...appliedConcept, variability: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-indigo-500 focus:outline-none transition-all"
+                        >
+                          <option value="">Selecciona</option>
+                          <option value="baja">Baja (s &lt; 2)</option>
+                          <option value="moderada">Moderada (2 ≤ s &lt; 5)</option>
+                          <option value="alta">Alta (s ≥ 5)</option>
+                        </select>
+                      </div>
+
+                      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <span className="text-purple-400 font-black">2</span>
+                          </div>
+                          <h4 className="font-bold text-white">Coeficiente de Variación (CV)</h4>
+                        </div>
+                        <select
+                          value={appliedConcept.cvLevel || ""}
+                          onChange={(e) => setAppliedConcept({ ...appliedConcept, cvLevel: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-purple-500 focus:outline-none transition-all"
+                        >
+                          <option value="">Selecciona</option>
+                          <option value="baja">Baja (&lt;15%)</option>
+                          <option value="moderada">Moderada (15-30%)</option>
+                          <option value="alta">Alta (≥30%)</option>
+                          <option value="no_interpretable">No interpretable</option>
+                        </select>
+                      </div>
+
+                      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                            <span className="text-pink-400 font-black">3</span>
+                          </div>
+                          <h4 className="font-bold text-white">Mejor medida para reportar dispersión</h4>
+                        </div>
+                        <select
+                          value={appliedConcept.bestMeasure || ""}
+                          onChange={(e) => setAppliedConcept({ ...appliedConcept, bestMeasure: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-pink-500 focus:outline-none transition-all"
+                        >
+                          <option value="">Selecciona</option>
+                          <option value="range">Rango</option>
+                          <option value="stddev">Desviación Estándar</option>
+                          <option value="iqr">IQR</option>
+                        </select>
+                      </div>
+
+                      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                            <span className="text-orange-400 font-black">4</span>
+                          </div>
+                          <h4 className="font-bold text-white">¿Qué medida se afecta MÁS por outliers?</h4>
+                        </div>
+                        <select
+                          value={appliedConcept.outlierEffect || ""}
+                          onChange={(e) => setAppliedConcept({ ...appliedConcept, outlierEffect: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-orange-500 focus:outline-none transition-all"
+                        >
+                          <option value="">Selecciona</option>
+                          <option value="range">Rango</option>
+                          <option value="stddev">Desviación Estándar</option>
+                          <option value="iqr">IQR</option>
+                          <option value="ninguno">Ninguno (sin outliers)</option>
+                        </select>
+                      </div>
                     </div>
 
-                    <div className="mt-4 flex gap-2">
-                      <button onClick={checkApplied} className="px-5 py-3 bg-green-500 hover:bg-green-600 rounded-xl font-black text-white text-sm flex items-center gap-2 transition-all">
-                        <CheckCircle className="w-4 h-4" />
-                        Verificar
-                      </button>
-                      <button onClick={() => {
-                        setAppliedInputs({ range: '', variance: '', stdDev: '', iqr: '' });
-                        setAppliedConcept({ variability: null, cvLevel: null, bestMeasure: null, outlierEffect: null });
-                        setAppliedFeedback(null);
-                      }} className="px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-black text-slate-200 text-sm transition-all">
-                        Reiniciar
-                      </button>
+                    <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-5">
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          onClick={checkApplied}
+                          className="px-5 py-3 bg-green-500 hover:bg-green-600 rounded-xl font-black text-white text-sm flex items-center gap-2 transition-all"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Verificar
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAppliedConcept({ variability: null, cvLevel: null, bestMeasure: null, outlierEffect: null });
+                            setAppliedFeedback(null);
+                          }}
+                          className="px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-black text-slate-200 text-sm transition-all"
+                        >
+                          Reiniciar
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </>
               )}
 
               {appliedFeedback && (
                 <div className={`mt-6 p-5 rounded-xl border ${appliedFeedback.ok ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'}`}>
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-3 mb-4">
                     {appliedFeedback.ok ? <CheckCircle className="w-5 h-5 text-green-400 mt-0.5" /> : <AlertCircle className="w-5 h-5 text-orange-400 mt-0.5" />}
                     <div className="flex-1">
                       <p className="font-black text-white">
                         {appliedFeedback.ok ? '¡Excelente!' : 'Casi — revisa esto:'}
-                        <span className="ml-2 text-slate-400 font-bold text-sm">Puntaje: {appliedFeedback.score}/8</span>
+                        <span className="ml-2 text-slate-400 font-bold text-sm">Puntaje: {appliedFeedback.score}/{appliedFeedback.totalQuestions}</span>
                       </p>
                       <p className="text-sm text-slate-300 mt-2">
                         <span className="text-blue-300 font-black">Rango:</span> {appliedFeedback.real.range} ·
-                        <span className="text-purple-300 font-black"> s²:</span> {appliedFeedback.real.variance} ·
                         <span className="text-pink-300 font-black"> s:</span> {appliedFeedback.real.stdDev} ·
                         <span className="text-orange-300 font-black"> IQR:</span> {appliedFeedback.real.iqr}
                       </p>
@@ -1549,6 +1809,62 @@ const Lab3_2 = ({ goHome, setView }) => {
                         <span className="text-indigo-300 font-black">Outliers:</span> {appliedFeedback.real.outCount} ·
                         <span className="text-cyan-300 font-black"> CV:</span> {appliedFeedback.real.cvCategory}
                       </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mt-4 pt-4 border-t border-white/10">
+                    <h4 className="text-xs font-black text-slate-400 uppercase mb-3">Desglose de respuestas</h4>
+
+                    <div className={`flex items-center justify-between p-3 rounded-lg ${appliedFeedback.details.variabilityOk ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                      <div className="flex items-center gap-2">
+                        {appliedFeedback.details.variabilityOk ?
+                          <CheckCircle className="w-4 h-4 text-green-400" /> :
+                          <XCircle className="w-4 h-4 text-red-400" />
+                        }
+                        <span className="text-sm font-bold text-white">Nivel de variabilidad</span>
+                      </div>
+                      <span className={`text-xs font-bold ${appliedFeedback.details.variabilityOk ? 'text-green-400' : 'text-red-400'}`}>
+                        {appliedFeedback.details.variabilityOk ? '✓' : `✗ (Real: ${appliedFeedback.real.variabilityReal})`}
+                      </span>
+                    </div>
+
+                    <div className={`flex items-center justify-between p-3 rounded-lg ${appliedFeedback.details.cvOk ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                      <div className="flex items-center gap-2">
+                        {appliedFeedback.details.cvOk ?
+                          <CheckCircle className="w-4 h-4 text-green-400" /> :
+                          <XCircle className="w-4 h-4 text-red-400" />
+                        }
+                        <span className="text-sm font-bold text-white">Coeficiente de Variación (CV)</span>
+                      </div>
+                      <span className={`text-xs font-bold ${appliedFeedback.details.cvOk ? 'text-green-400' : 'text-red-400'}`}>
+                        {appliedFeedback.details.cvOk ? '✓' : `✗ (Real: ${appliedFeedback.real.cvCategory})`}
+                      </span>
+                    </div>
+
+                    <div className={`flex items-center justify-between p-3 rounded-lg ${appliedFeedback.details.bestMeasureOk ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                      <div className="flex items-center gap-2">
+                        {appliedFeedback.details.bestMeasureOk ?
+                          <CheckCircle className="w-4 h-4 text-green-400" /> :
+                          <XCircle className="w-4 h-4 text-red-400" />
+                        }
+                        <span className="text-sm font-bold text-white">Mejor medida para dispersión</span>
+                      </div>
+                      <span className={`text-xs font-bold ${appliedFeedback.details.bestMeasureOk ? 'text-green-400' : 'text-red-400'}`}>
+                        {appliedFeedback.details.bestMeasureOk ? '✓' : `✗ (Real: ${appliedFeedback.real.bestMeasureReal === 'stddev' ? 'Desv. Std' : 'IQR'})`}
+                      </span>
+                    </div>
+
+                    <div className={`flex items-center justify-between p-3 rounded-lg ${appliedFeedback.details.outlierEffectOk ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                      <div className="flex items-center gap-2">
+                        {appliedFeedback.details.outlierEffectOk ?
+                          <CheckCircle className="w-4 h-4 text-green-400" /> :
+                          <XCircle className="w-4 h-4 text-red-400" />
+                        }
+                        <span className="text-sm font-bold text-white">Impacto de outliers</span>
+                      </div>
+                      <span className={`text-xs font-bold ${appliedFeedback.details.outlierEffectOk ? 'text-green-400' : 'text-red-400'}`}>
+                        {appliedFeedback.details.outlierEffectOk ? '✓' : `✗ (Real: ${appliedFeedback.real.outlierEffectReal})`}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1585,7 +1901,7 @@ const Lab3_2 = ({ goHome, setView }) => {
                 return (
                   <div key={q.id} className={`bg-slate-900/50 rounded-2xl p-6 border-2 transition-all ${result ? (result.correct ? 'border-green-500/50 bg-green-500/5' : 'border-red-500/50 bg-red-500/5') : 'border-slate-700 hover:border-slate-600'}`}>
                     <div className="flex items-start gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-blacktext-lg shrink-0 ${result ? (result.correct ? 'bg-green-500 text-white' : 'bg-red-500 text-white') : 'bg-indigo-500 text-white'}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg shrink-0 ${result ? (result.correct ? 'bg-green-500 text-white' : 'bg-red-500 text-white') : 'bg-indigo-500 text-white'}`}>
                         {result ? (result.correct ? '✓' : '✗') : qIdx + 1}
                       </div>
                       <div className="flex-1">
@@ -1654,13 +1970,17 @@ const Lab3_2 = ({ goHome, setView }) => {
     </div>
   );
 
+  // ============================================
+  // RENDER: PESTAÑA COMPARACIÓN
+  // ============================================
+
   const renderComparisonTab = () => {
     if (activeData.length === 0) {
       return (
         <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-12 text-center">
           <Target className="w-16 h-16 mx-auto mb-4 text-slate-700" />
           <h3 className="text-xl font-bold text-slate-400 mb-2">Sin datos cargados</h3>
-          <p className="text-slate-500">Selecciona un dataset en "Calculadora"</p>
+          <p className="text-slate-500">Selecciona un dataset en "Datasets"</p>
         </div>
       );
     }
@@ -1738,6 +2058,10 @@ const Lab3_2 = ({ goHome, setView }) => {
     );
   };
 
+  // ============================================
+  // RENDER PRINCIPAL
+  // ============================================
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -1762,7 +2086,6 @@ const Lab3_2 = ({ goHome, setView }) => {
            hover:scale-105 hover:shadow-lg
            active:scale-95
            group"
-
             >
               <ArrowLeft className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" />
               <span className="tracking-wide">Volver al Índice</span>
@@ -1798,9 +2121,10 @@ const Lab3_2 = ({ goHome, setView }) => {
         <div className="flex gap-3 border-b border-white/10 pb-4 flex-wrap">
           {[
             { id: 'intro', label: 'Introducción', icon: Info },
-            { id: 'calculator', label: 'Calculadora', icon: Calculator },
+            { id: 'datasets', label: 'Datasets', icon: Database },
             { id: 'practice', label: 'Práctica', icon: Brain },
-            { id: 'comparison', label: 'Comparación', icon: Activity }
+            { id: 'comparison', label: 'Comparación', icon: Activity },
+            { id: 'calculator', label: 'Calculadora', icon: Calculator }
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${activeTab === tab.id ? 'bg-pink-500 text-white shadow-lg shadow-pink-500/30' : 'bg-white/5 hover:bg-white/10 text-slate-300'}`}>
               <tab.icon className="w-4 h-4" />{tab.label}
@@ -1809,9 +2133,10 @@ const Lab3_2 = ({ goHome, setView }) => {
         </div>
 
         {activeTab === 'intro' && renderIntroTab()}
-        {activeTab === 'calculator' && renderCalculatorTab()}
+        {activeTab === 'datasets' && renderDatasetsTab()}
         {activeTab === 'practice' && renderPracticeTab()}
         {activeTab === 'comparison' && renderComparisonTab()}
+        {activeTab === 'calculator' && renderCalculatorManualTab()}
       </main>
     </div>
   );
