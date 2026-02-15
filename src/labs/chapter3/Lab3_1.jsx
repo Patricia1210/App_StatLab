@@ -370,6 +370,9 @@ const Lab3_1 = ({ goHome, setView }) => {
   const [appliedFeedback, setAppliedFeedback] = useState(null);
 
   const [manualData, setManualData] = useState(["", "", "", "", ""]);
+  const [numIntervals, setNumIntervals] = useState(5);
+  const [chartBgColor, setChartBgColor] = useState('transparent');
+
 
   const [appliedConcept, setAppliedConcept] = useState({
     dist: null,
@@ -694,6 +697,12 @@ const Lab3_1 = ({ goHome, setView }) => {
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
+  // Agregar esta función ANTES de prepareHistogramData()
+  const getTextColor = (bgColor) => {
+    if (bgColor === '#ffffff') return '#000000';  // Texto negro en fondo blanco
+    return '#ffffff';  // Texto blanco en otros fondos
+  };
+
   const prepareHistogramData = () => {
     if (activeData.length === 0) return { bins: [] };
 
@@ -715,14 +724,12 @@ const Lab3_1 = ({ goHome, setView }) => {
       };
     }
 
-    const actualBinSize = binSize === 'auto'
-      ? calculateBinSize(activeData, binMethod)
-      : Math.max(1e-9, parseFloat(binSize));
+    // 🔹 USAR DIRECTAMENTE EL ESTADO bins (5, 7, 10, etc.)
+    const numBins = numIntervals;  // ← Ahora 
+    const binWidth = range / numBins;  // ← Dividimos el rango entre el número de bins
 
-    const numBins = Math.max(5, Math.min(30, Math.ceil(range / actualBinSize)));
-    const binWidth = range / numBins;
-
-    const bins = Array.from({ length: numBins }, (_, i) => ({
+    // 🔹 Crear el array de bins (con otro nombre para evitar conflicto)
+    const binsArray = Array.from({ length: numBins }, (_, i) => ({
       start: min + i * binWidth,
       end: min + (i + 1) * binWidth,
       center: min + i * binWidth + binWidth / 2,
@@ -734,17 +741,17 @@ const Lab3_1 = ({ goHome, setView }) => {
 
     activeData.forEach(val => {
       const idx = Math.min(numBins - 1, Math.floor((val - min) / binWidth));
-      bins[idx].count++;
+      binsArray[idx].count++;
     });
 
-    bins.forEach(b => {
+    binsArray.forEach(b => {
       b.relFreq = Number(((b.count / activeData.length) * 100).toFixed(2));
     });
 
     if (outlierInfo.outliers.length > 0) {
       outlierInfo.outliers.forEach(outlier => {
         const idx = Math.min(numBins - 1, Math.floor((outlier - min) / binWidth));
-        bins[idx].hasOutliers = true;
+        binsArray[idx].hasOutliers = true;
       });
     }
 
@@ -752,7 +759,7 @@ const Lab3_1 = ({ goHome, setView }) => {
       const n = activeData.length;
       const inv = 1 / (stdDev * Math.sqrt(2 * Math.PI));
 
-      bins.forEach(b => {
+      binsArray.forEach(b => {
         const x = b.center;
         const exp = -((x - mean) ** 2) / (2 * (stdDev ** 2));
         const pdf = inv * Math.exp(exp);
@@ -766,7 +773,7 @@ const Lab3_1 = ({ goHome, setView }) => {
       });
     }
 
-    return { bins };
+    return { bins: binsArray };  // ← Devolvemos el array
   };
   const renderIntroTab = () => (
     <div className="space-y-8">
@@ -1126,6 +1133,33 @@ const Lab3_1 = ({ goHome, setView }) => {
                   <div className="flex gap-1 mt-2">{PALETTES[colorPalette].colors.map((c, i) => <div key={i} className="h-6 flex-1 rounded" style={{ backgroundColor: c }} />)}</div>
                 </div>
               </div>
+              <div>
+                <label className="text-xs font-bold text-slate-400 uppercase block mb-2">
+                  Fondo del gráfico
+                </label>
+                <select
+                  value={chartBgColor}
+                  onChange={(e) => {
+                    setChartBgColor(e.target.value);
+                    setChartKey(p => p + 1);
+                  }}
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white"
+                >
+                  <option value="transparent">Transparente</option>
+                  <option value="#ffffff">Blanco</option>
+                  <option value="#f5f5f5">Gris Claro</option>
+                  <option value="#e5e5e5">Crema</option>
+                  <option value="#1e293b">Pizarra</option>
+                  <option value="#000000">Negro</option>
+                </select>
+
+                {/* Preview del color seleccionado */}
+                <div className="mt-3 p-4 rounded-lg border border-slate-700" style={{ backgroundColor: chartBgColor }}>
+                  <p className="text-xs text-center font-bold" style={{ color: chartBgColor === '#ffffff' || chartBgColor === '#f5f5f5' || chartBgColor === '#e5e5e5' ? '#000000' : '#ffffff' }}>
+                    Vista previa del fondo
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1151,10 +1185,37 @@ const Lab3_1 = ({ goHome, setView }) => {
                 </div>
               </div>
             ) : (
-              <div ref={chartRef} key={chartKey}>
+              <div
+                ref={chartRef}
+                key={chartKey}
+                style={{ backgroundColor: chartBgColor }}
+                className="rounded-xl p-4"
+              >
                 <div className="mb-4 text-center">
-                  <h4 className="text-lg font-bold text-white">{chartTitle}</h4>
-                  <p className="text-xs text-slate-500 mt-1">n = {activeData.length} | Rango: {Math.min(...activeData).toFixed(2)} - {Math.max(...activeData).toFixed(2)} {dataUnit}</p>
+                  <h4 className="text-lg font-bold" style={{ color: getTextColor(chartBgColor) }}>
+                    {chartTitle}
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1">n = {activeData.length} | Rango: ...</p>
+                </div>
+                <div className="flex items-center gap-3 mb-4">
+                  <label className="text-sm text-slate-300 font-bold">
+                    Intervalos:
+                  </label>
+
+                  <select
+                    value={numIntervals}
+                    onChange={(e) => {
+                      setNumIntervals(Number(e.target.value));
+                      setChartKey(prev => prev + 1);
+                    }}
+                    className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
+                  >
+                    <option value={3}>3</option>
+                    <option value={5}>5</option>
+                    <option value={7}>7</option>
+                    <option value={10}>10</option>
+                    <option value={15}>15</option>
+                  </select>
                 </div>
 
                 <ResponsiveContainer width="100%" height={500}>
@@ -1203,7 +1264,7 @@ const Lab3_1 = ({ goHome, setView }) => {
                         const d = payload[0].payload;
                         return (
                           <div className="bg-slate-900/95 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
-                            <p className="text-white font-bold text-xs mb-1">{d.start.toFixed(1)} - {d.end.toFixed(1)} {dataUnit}</p>
+                            <p className="text-white font-bold text-xs mb-1">{d.start.toFixed(2)} - {d.end.toFixed(2)} {dataUnit}</p>
                             <p className="text-indigo-400 text-sm">Frecuencia: {d.count}</p>
                             <p className="text-purple-400 text-xs">{d.relFreq}% del total</p>
                             {d.hasOutliers && <p className="text-orange-400 text-xs font-bold mt-1">⚠️ Contiene outliers</p>}
@@ -1249,9 +1310,9 @@ const Lab3_1 = ({ goHome, setView }) => {
                       />
                     )}
 
-                    {showMean && mean && <ReferenceLine x={mean} stroke="#22d3ee" strokeWidth={3} strokeDasharray="5 5" label={{ value: `μ=${mean.toFixed(1)}`, position: 'top', fill: '#22d3ee', fontWeight: 700, fontSize: 11 }} />}
+                    {showMean && mean && <ReferenceLine x={mean} stroke="#22d3ee" strokeWidth={3} strokeDasharray="5 5" label={{ value: `μ=${mean.toFixed(2)}`, position: 'top', fill: '#22d3ee', fontWeight: 700, fontSize: 11 }} />}
 
-                    {showMedian && median && <ReferenceLine x={median} stroke="#c084fc" strokeWidth={3} strokeDasharray="3 3" label={{ value: `Me=${median.toFixed(1)}`, position: 'top', fill: '#c084fc', fontWeight: 700, fontSize: 11, offset: 15 }} />}
+                    {showMedian && median && <ReferenceLine x={median} stroke="#c084fc" strokeWidth={3} strokeDasharray="3 3" label={{ value: `Me=${median.toFixed(2)}`, position: 'top', fill: '#c084fc', fontWeight: 700, fontSize: 11, offset: 15 }} />}
 
                     {showMode && mode != null && typeof mode === 'number' && (
                       <ReferenceLine
@@ -1259,7 +1320,7 @@ const Lab3_1 = ({ goHome, setView }) => {
                         stroke="#f472b6"
                         strokeWidth={2.5}
                         label={{
-                          value: `Mo=${mode.toFixed(1)}`,
+                          value: `Mo=${mode.toFixed(2)}`,
                           position: 'bottom',
                           fill: '#f472b6',
                           fontWeight: 700,
@@ -1333,7 +1394,9 @@ const Lab3_1 = ({ goHome, setView }) => {
     <div className="space-y-6">
       <div className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20 rounded-3xl p-8">
         <div className="flex items-start gap-4 mb-6">
-          <div className="p-3 bg-green-500/20 rounded-xl"><Brain className="w-8 h-8 text-green-400" /></div>
+          <div className="p-3 bg-green-500/20 rounded-xl">
+            <Brain className="w-8 h-8 text-green-400" />
+          </div>
           <div>
             <h2 className="text-2xl font-black text-white mb-2">Modo Práctica</h2>
             <p className="text-slate-400">Pon a prueba tus conocimientos sobre medidas de tendencia central</p>
@@ -1341,10 +1404,22 @@ const Lab3_1 = ({ goHome, setView }) => {
         </div>
 
         <div className="flex gap-2 mb-6">
-          <button onClick={() => setPracticeMode('applied')} className={`px-5 py-3 rounded-xl font-black text-sm transition-all ${practiceMode === 'applied' ? 'bg-green-500 text-white shadow-lg' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}>
+          <button
+            onClick={() => setPracticeMode('applied')}
+            className={`px-5 py-3 rounded-xl font-black text-sm transition-all ${practiceMode === 'applied'
+              ? 'bg-green-500 text-white shadow-lg'
+              : 'bg-white/5 text-slate-300 hover:bg-white/10'
+              }`}
+          >
             Práctica Aplicada
           </button>
-          <button onClick={() => setPracticeMode('quiz')} className={`px-5 py-3 rounded-xl font-black text-sm transition-all ${practiceMode === 'quiz' ? 'bg-indigo-500 text-white shadow-lg' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}>
+          <button
+            onClick={() => setPracticeMode('quiz')}
+            className={`px-5 py-3 rounded-xl font-black text-sm transition-all ${practiceMode === 'quiz'
+              ? 'bg-indigo-500 text-white shadow-lg'
+              : 'bg-white/5 text-slate-300 hover:bg-white/10'
+              }`}
+          >
             Quiz
           </button>
         </div>
@@ -1361,15 +1436,14 @@ const Lab3_1 = ({ goHome, setView }) => {
                   <ol className="space-y-2 text-sm text-slate-300">
                     <li className="flex items-start gap-2">
                       <span className="font-black text-green-400 mt-0.5">1.</span>
-                      <span>Primero ve a la pestaña <strong className="text-white">Datasets</strong> y selecciona un dataset (o sube tu propio archivo)</span>
+                      <span>Selecciona un dataset aquí mismo o ve a la pestaña <strong className="text-white">Datasets</strong></span>
                     </li>
                     <li className="flex items-start gap-2">
                       <span className="font-black text-green-400 mt-0.5">2.</span>
-                      <span>Analiza la distribución y responde las preguntas conceptuales en esta pestaña basándote en lo que observas.</span>
+                      <span>Analiza la distribución y responde las preguntas conceptuales basándote en lo que observas.</span>
                     </li>
-
                     <li className="flex items-start gap-2">
-                      <span className="font-black text-green-400 mt-0.5">4.</span>
+                      <span className="font-black text-green-400 mt-0.5">3.</span>
                       <span>Haz clic en <strong className="text-white">"Verificar"</strong> para ver qué tan cerca estuviste</span>
                     </li>
                     <li className="flex items-start gap-2">
@@ -1397,7 +1471,10 @@ const Lab3_1 = ({ goHome, setView }) => {
                   </p>
                 </div>
                 {activeData.length > 0 && (
-                  <button onClick={addOutlierShock} className="px-4 py-2 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 rounded-xl text-orange-300 font-black text-sm flex items-center gap-2 transition-all">
+                  <button
+                    onClick={addOutlierShock}
+                    className="px-4 py-2 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 rounded-xl text-orange-300 font-black text-sm flex items-center gap-2 transition-all"
+                  >
                     <Zap className="w-4 h-4" />
                     Agregar Outlier (+50%)
                   </button>
@@ -1409,116 +1486,196 @@ const Lab3_1 = ({ goHome, setView }) => {
                   <Database className="w-12 h-12 mx-auto mb-3 text-indigo-400" />
                   <h4 className="font-black text-white mb-2">No hay dataset seleccionado</h4>
                   <p className="text-sm text-slate-400 mb-4">
-                    Ve a la pestaña <strong className="text-white">Datasets</strong> y selecciona un dataset para empezar
+                    Selecciona un dataset aquí mismo
                   </p>
-                  <button onClick={() => setActiveTab('datasets')} className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white text-sm flex items-center gap-2 mx-auto transition-all">
-                    <ArrowRight className="w-4 h-4" />
-                    Ir a Datasets
-                  </button>
+
+                  <div className="mt-4 space-y-2">
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2">
+                      Datasets disponibles
+                    </label>
+                    {Object.entries(PRESET_DATASETS).map(([key, ds]) => {
+                      const Icon = ds.icon;
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => handleDatasetSelect(key)}
+                          className="w-full p-3 rounded-lg border-2 border-slate-700 bg-slate-800/50 hover:border-indigo-500/50 transition-all text-left"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Icon className="w-4 h-4 text-slate-400" />
+                            <div className="flex-1">
+                              <div className="font-bold text-white text-sm">{ds.label}</div>
+                              <div className="text-xs text-slate-400">{ds.description}</div>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {/* CORRECCIÓN: Práctica Aplicada con diseño mejorado del laboratorio */}
-                  <div className="space-y-4">
-                    <h2 className="text-xl font-black text-white mb-4">Práctica Aplicada</h2>
+                <>
+                  <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-slate-700 rounded-xl p-4 mb-4">
+                    <h4 className="text-sm font-bold text-slate-300 mb-3 flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-indigo-400" />
+                      Vista rápida de los datos
+                    </h4>
 
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-                          <span className="text-indigo-400 font-black">1</span>
-                        </div>
-                        <h4 className="font-bold text-white">Forma de la distribución</h4>
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-slate-400 mb-1">Media</p>
+                        <p className="text-lg font-black text-cyan-400">{mean?.toFixed(2) || '-'}</p>
                       </div>
-                      <select
-                        value={appliedConcept.dist || ""}
-                        onChange={(e) => setAppliedConcept({ ...appliedConcept, dist: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-indigo-500 focus:outline-none transition-all"
-                      >
-                        <option value="">Selecciona</option>
-                        <option value="simetrica">Simétrica</option>
-                        <option value="sesgo_pos">Sesgada positiva</option>
-                        <option value="sesgo_neg">Sesgada negativa</option>
-                        <option value="no_det">No se puede determinar</option>
-                      </select>
+                      <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-slate-400 mb-1">Mediana</p>
+                        <p className="text-lg font-black text-purple-400">{median?.toFixed(2) || '-'}</p>
+                      </div>
+                      <div className="bg-slate-900/50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-slate-400 mb-1">Moda</p>
+                        <p className="text-lg font-black text-pink-400">
+                          {mode == null ? 'N/A' : (Array.isArray(mode) ? mode[0] : mode)}
+                        </p>
+                      </div>
                     </div>
 
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                          <span className="text-purple-400 font-black">2</span>
-                        </div>
-                        <h4 className="font-bold text-white">Variabilidad (CV)</h4>
+                    <div className="bg-slate-900/50 rounded-lg p-3">
+                      <p className="text-xs text-slate-400 mb-2">Distribución rápida</p>
+                      <div className="flex items-end gap-1 h-20">
+                        {(() => {
+                          const { bins: quickBins } = prepareHistogramData();
+                          const maxCount = Math.max(...quickBins.map(b => b.count));
+                          return quickBins.slice(0, 10).map((bin, idx) => (
+                            <div
+                              key={idx}
+                              className="flex-1 bg-gradient-to-t from-indigo-500 to-purple-500 rounded-t"
+                              style={{
+                                height: `${(bin.count / maxCount) * 100}%`,
+                                opacity: 0.7
+                              }}
+                              title={`${bin.count} valores`}
+                            />
+                          ));
+                        })()}
                       </div>
-                      <select
-                        value={appliedConcept.cv || ""}
-                        onChange={(e) => setAppliedConcept({ ...appliedConcept, cv: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-purple-500 focus:outline-none transition-all"
-                      >
-                        <option value="">Selecciona</option>
-                        <option value="baja">Baja</option>
-                        <option value="moderada">Moderada</option>
-                        <option value="alta">Alta</option>
-                        <option value="no_interpretable">No interpretable</option>
-                      </select>
                     </div>
 
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center">
-                          <span className="text-pink-400 font-black">3</span>
-                        </div>
-                        <h4 className="font-bold text-white">Mejor medida para reportar el centro</h4>
-                      </div>
-                      <select
-                        value={appliedConcept.bestMeasure || ""}
-                        onChange={(e) => setAppliedConcept({ ...appliedConcept, bestMeasure: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-pink-500 focus:outline-none transition-all"
-                      >
-                        <option value="">Selecciona</option>
-                        <option value="mean">Media</option>
-                        <option value="median">Mediana</option>
-                        <option value="mode">Moda</option>
-                      </select>
-                    </div>
-
-                    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                          <span className="text-orange-400 font-black">4</span>
-                        </div>
-                        <h4 className="font-bold text-white">Si eliminaras los outliers, ¿qué cambiaría más?</h4>
-                      </div>
-                      <select
-                        value={appliedConcept.outImpact || ""}
-                        onChange={(e) => setAppliedConcept({ ...appliedConcept, outImpact: e.target.value })}
-                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-orange-500 focus:outline-none transition-all"
-                      >
-                        <option value="">Selecciona</option>
-                        <option value="media">Media</option>
-                        <option value="mediana">Mediana</option>
-                        <option value="moda">Moda</option>
-                        <option value="nada">Nada</option>
-                      </select>
-                    </div>
+                    <button
+                      onClick={() => setActiveTab('datasets')}
+                      className="mt-3 w-full px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 rounded-lg text-indigo-300 font-bold text-sm flex items-center justify-center gap-2 transition-all"
+                    >
+                      <Database className="w-4 h-4" />
+                      Cambiar dataset
+                    </button>
                   </div>
 
-                  <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-5">
-                    <div className="mt-4 flex gap-2">
-                      <button onClick={checkApplied} className="px-5 py-3 bg-green-500 hover:bg-green-600 rounded-xl font-black text-white text-sm flex items-center gap-2 transition-all">
-                        <CheckCircle className="w-4 h-4" />
-                        Verificar
-                      </button>
-                      <button onClick={() => {
-                        setAppliedPred({ meanVsMedian: null, hasOutliers: null, bestMeasure: null });
-                        setAppliedInputs({ mean: '', median: '', mode: '' });
-                        setAppliedConcept({ dist: null, cv: null, bestMeasure: null, outImpact: null });
-                        setAppliedFeedback(null);
-                      }} className="px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-black text-slate-200 text-sm transition-all">
-                        Reiniciar
-                      </button>
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <h2 className="text-xl font-black text-white mb-4">Práctica Aplicada</h2>
+
+                      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+                            <span className="text-indigo-400 font-black">1</span>
+                          </div>
+                          <h4 className="font-bold text-white">Forma de la distribución</h4>
+                        </div>
+                        <select
+                          value={appliedConcept.dist || ""}
+                          onChange={(e) => setAppliedConcept({ ...appliedConcept, dist: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-indigo-500 focus:outline-none transition-all"
+                        >
+                          <option value="">Selecciona</option>
+                          <option value="simetrica">Simétrica</option>
+                          <option value="sesgo_pos">Sesgada positiva</option>
+                          <option value="sesgo_neg">Sesgada negativa</option>
+                          <option value="no_det">No se puede determinar</option>
+                        </select>
+                      </div>
+
+                      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <span className="text-purple-400 font-black">2</span>
+                          </div>
+                          <h4 className="font-bold text-white">Variabilidad (CV)</h4>
+                        </div>
+                        <select
+                          value={appliedConcept.cv || ""}
+                          onChange={(e) => setAppliedConcept({ ...appliedConcept, cv: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-purple-500 focus:outline-none transition-all"
+                        >
+                          <option value="">Selecciona</option>
+                          <option value="baja">Baja</option>
+                          <option value="moderada">Moderada</option>
+                          <option value="alta">Alta</option>
+                          <option value="no_interpretable">No interpretable</option>
+                        </select>
+                      </div>
+
+                      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                            <span className="text-pink-400 font-black">3</span>
+                          </div>
+                          <h4 className="font-bold text-white">Mejor medida para reportar el centro</h4>
+                        </div>
+                        <select
+                          value={appliedConcept.bestMeasure || ""}
+                          onChange={(e) => setAppliedConcept({ ...appliedConcept, bestMeasure: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-pink-500 focus:outline-none transition-all"
+                        >
+                          <option value="">Selecciona</option>
+                          <option value="mean">Media</option>
+                          <option value="median">Mediana</option>
+                          <option value="mode">Moda</option>
+                        </select>
+                      </div>
+
+                      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                            <span className="text-orange-400 font-black">4</span>
+                          </div>
+                          <h4 className="font-bold text-white">Si eliminaras los outliers, ¿qué cambiaría más?</h4>
+                        </div>
+                        <select
+                          value={appliedConcept.outImpact || ""}
+                          onChange={(e) => setAppliedConcept({ ...appliedConcept, outImpact: e.target.value })}
+                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-lg text-white font-semibold focus:border-orange-500 focus:outline-none transition-all"
+                        >
+                          <option value="">Selecciona</option>
+                          <option value="media">Media</option>
+                          <option value="mediana">Mediana</option>
+                          <option value="moda">Moda</option>
+                          <option value="nada">Nada</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-5">
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          onClick={checkApplied}
+                          className="px-5 py-3 bg-green-500 hover:bg-green-600 rounded-xl font-black text-white text-sm flex items-center gap-2 transition-all"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Verificar
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAppliedPred({ meanVsMedian: null, hasOutliers: null, bestMeasure: null });
+                            setAppliedInputs({ mean: '', median: '', mode: '' });
+                            setAppliedConcept({ dist: null, cv: null, bestMeasure: null, outImpact: null });
+                            setAppliedFeedback(null);
+                          }}
+                          className="px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-black text-slate-200 text-sm transition-all"
+                        >
+                          Reiniciar
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </>
               )}
 
               {appliedFeedback && (
@@ -1549,7 +1706,6 @@ const Lab3_1 = ({ goHome, setView }) => {
 
         {practiceMode === 'quiz' && (
           <>
-            {/* CORRECCIÓN: Título único "Quiz" sin división por niveles */}
             <h3 className="text-2xl font-black text-white mb-6">Quiz</h3>
 
             {Object.keys(practiceResults).length > 0 && (
@@ -1562,7 +1718,16 @@ const Lab3_1 = ({ goHome, setView }) => {
                   <div className="text-right">
                     <div className="text-4xl font-black text-indigo-400">{((practiceScore / PRACTICE_QUESTIONS.length) * 100).toFixed(0)}%</div>
                     <div className="flex items-center gap-1 mt-1">
-                      {practiceScore === PRACTICE_QUESTIONS.length ? <><Award className="w-4 h-4 text-yellow-400" /><span className="text-xs text-yellow-400 font-bold">¡Perfecto!</span></> : practiceScore >= PRACTICE_QUESTIONS.length * 0.7 ? <span className="text-xs text-green-400 font-bold">¡Muy bien!</span> : <span className="text-xs text-orange-400 font-bold">Sigue practicando</span>}
+                      {practiceScore === PRACTICE_QUESTIONS.length ? (
+                        <>
+                          <Award className="w-4 h-4 text-yellow-400" />
+                          <span className="text-xs text-yellow-400 font-bold">¡Perfecto!</span>
+                        </>
+                      ) : practiceScore >= PRACTICE_QUESTIONS.length * 0.7 ? (
+                        <span className="text-xs text-green-400 font-bold">¡Muy bien!</span>
+                      ) : (
+                        <span className="text-xs text-orange-400 font-bold">Sigue practicando</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1574,9 +1739,18 @@ const Lab3_1 = ({ goHome, setView }) => {
                 const result = practiceResults[q.id];
 
                 return (
-                  <div key={q.id} className={`bg-slate-900/50 rounded-2xl p-6 border-2 transition-all ${result ? (result.correct ? 'border-green-500/50 bg-green-500/5' : 'border-red-500/50 bg-red-500/5') : 'border-slate-700 hover:border-slate-600'}`}>
+                  <div
+                    key={q.id}
+                    className={`bg-slate-900/50 rounded-2xl p-6 border-2 transition-all ${result
+                      ? (result.correct ? 'border-green-500/50 bg-green-500/5' : 'border-red-500/50 bg-red-500/5')
+                      : 'border-slate-700 hover:border-slate-600'
+                      }`}
+                  >
                     <div className="flex items-start gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg shrink-0 ${result ? (result.correct ? 'bg-green-500 text-white' : 'bg-red-500 text-white') : 'bg-indigo-500 text-white'}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg shrink-0 ${result
+                        ? (result.correct ? 'bg-green-500 text-white' : 'bg-red-500 text-white')
+                        : 'bg-indigo-500 text-white'
+                        }`}>
                         {result ? (result.correct ? '✓' : '✗') : qIdx + 1}
                       </div>
                       <div className="flex-1">
@@ -1594,17 +1768,32 @@ const Lab3_1 = ({ goHome, setView }) => {
                                 onClick={() => !showResult && handlePracticeAnswer(q.id, idx)}
                                 disabled={showResult}
                                 className={`w-full text-left p-4 rounded-lg border-2 transition-all ${showResult
-                                  ? isCorrect ? 'border-green-500 bg-green-500/10' : isSelected ? 'border-red-500 bg-red-500/10' : 'border-slate-700 bg-slate-800/30'
-                                  : isSelected ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-700 bg-slate-800/50 hover:border-indigo-500/50 hover:bg-slate-800'
+                                  ? isCorrect
+                                    ? 'border-green-500 bg-green-500/10'
+                                    : isSelected
+                                      ? 'border-red-500 bg-red-500/10'
+                                      : 'border-slate-700 bg-slate-800/30'
+                                  : isSelected
+                                    ? 'border-indigo-500 bg-indigo-500/10'
+                                    : 'border-slate-700 bg-slate-800/50 hover:border-indigo-500/50 hover:bg-slate-800'
                                   } ${showResult ? 'cursor-default' : 'cursor-pointer'}`}
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${showResult ? (isCorrect ? 'bg-green-500 text-white' : isSelected ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-400')
-                                    : isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-400'
+                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${showResult
+                                    ? (isCorrect
+                                      ? 'bg-green-500 text-white'
+                                      : isSelected
+                                        ? 'bg-red-500 text-white'
+                                        : 'bg-slate-700 text-slate-400')
+                                    : isSelected
+                                      ? 'bg-indigo-500 text-white'
+                                      : 'bg-slate-700 text-slate-400'
                                     }`}>
                                     {String.fromCharCode(65 + idx)}
                                   </div>
-                                  <span className={`text-sm ${showResult && isCorrect ? 'text-green-400 font-bold' : 'text-slate-300'}`}>{opt}</span>
+                                  <span className={`text-sm ${showResult && isCorrect ? 'text-green-400 font-bold' : 'text-slate-300'}`}>
+                                    {opt}
+                                  </span>
                                   {showResult && isCorrect && <CheckCircle className="w-5 h-5 text-green-400 ml-auto" />}
                                   {showResult && isSelected && !isCorrect && <XCircle className="w-5 h-5 text-red-400 ml-auto" />}
                                 </div>
@@ -1614,7 +1803,9 @@ const Lab3_1 = ({ goHome, setView }) => {
                         </div>
                         {result && !result.correct && (
                           <div className="mt-4 p-4 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
-                            <p className="text-sm text-indigo-300"><strong className="text-indigo-400">Explicación:</strong> {q.explanation}</p>
+                            <p className="text-sm text-indigo-300">
+                              <strong className="text-indigo-400">Explicación:</strong> {q.explanation}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -1626,16 +1817,28 @@ const Lab3_1 = ({ goHome, setView }) => {
 
             {Object.keys(practiceAnswers).length === PRACTICE_QUESTIONS.length && Object.keys(practiceResults).length === 0 && (
               <div className="mt-6 flex justify-center">
-                <button onClick={checkPracticeAnswers} className="px-8 py-4 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white flex items-center gap-2 shadow-lg shadow-indigo-500/30 transition-all">
-                  <CheckCircle className="w-5 h-5" />Verificar Respuestas
+                <button
+                  onClick={checkPracticeAnswers}
+                  className="px-8 py-4 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white flex items-center gap-2 shadow-lg shadow-indigo-500/30 transition-all"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  Verificar Respuestas
                 </button>
               </div>
             )}
 
             {Object.keys(practiceResults).length > 0 && (
               <div className="mt-6 flex justify-center">
-                <button onClick={() => { setPracticeAnswers({}); setPracticeResults({}); setPracticeScore(0); }} className="px-8 py-4 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white flex items-center gap-2 transition-all">
-                  <Zap className="w-5 h-5" />Intentar de Nuevo
+                <button
+                  onClick={() => {
+                    setPracticeAnswers({});
+                    setPracticeResults({});
+                    setPracticeScore(0);
+                  }}
+                  className="px-8 py-4 bg-indigo-500 hover:bg-indigo-600 rounded-xl font-black text-white flex items-center gap-2 transition-all"
+                >
+                  <Zap className="w-5 h-5" />
+                  Intentar de Nuevo
                 </button>
               </div>
             )}
@@ -1644,7 +1847,6 @@ const Lab3_1 = ({ goHome, setView }) => {
       </div>
     </div>
   );
-
   const renderComparisonTab = () => {
     if (activeData.length === 0) {
       return (
