@@ -854,7 +854,7 @@ const Lab4_1 = ({ goHome, setView }) => {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-purple-400 font-bold mt-0.5">•</span>
-                <span>¿La clase social está relacionada con la sobrevivencia?</span>
+                <span>¿La clase social está relacionada con la esperanza de vida?</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-pink-400 font-bold mt-0.5">•</span>
@@ -1123,113 +1123,188 @@ const Lab4_1 = ({ goHome, setView }) => {
                   </p>
                 </div>
 
-                {chartType === 'mosaic' ? (
-                  <ResponsiveContainer width="100%" height={500}>
-                    <Treemap
-                      data={prepareMosaicData(activeData)}
-                      dataKey="size"
-                      stroke="#ffffff"
-                      strokeWidth={3}
-                      isAnimationActive={false}
-                      content={(props) => {
-                        const { x, y, width, height, name, value, index } = props;
+                {/* ================= MOSAICO ================= */}
+                {/* ================= MOSAICO CORREGIDO ================= */}
+                {chartType === 'mosaic' && contingencyTable && categories1.length > 0 && categories2.length > 0 && (
+                  <div
+                    className="space-y-6 p-8 rounded-3xl border transition-all duration-500 shadow-2xl"
+                    style={{
+                      backgroundColor: chartBgColor,
+                      borderColor: chartBgColor === 'transparent' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    {(() => {
+                      // 1. FUNCIÓN DE BRILLO MEJORADA
+                      const getIsLight = (color) => {
+                        if (!color || color === 'transparent') return false; // Transparente = Fondo oscuro de la app
+                        if (color === 'white' || color === '#ffffff') return true;
+                        if (color === '#f5f5f5') return true; // Gris claro de tu selector
 
-                        if (!name || !value) return null;
-
-                        const colors = PALETTES[colorPalette].colors;
-                        const parts = name.split(" - ");
-                        const label = parts[1] || parts[0];
-                        const colorIndex = index % colors.length;
-
-                        const percentage = contingencyTable
-                          ? ((value / contingencyTable.grand_total) * 100).toFixed(1)
-                          : "0.0";
-
-                        if (width < 100 || height < 80) {
-                          return (
-                            <rect
-                              x={x}
-                              y={y}
-                              width={width}
-                              height={height}
-                              fill={colors[colorIndex]}
-                              stroke="#ffffff"
-                              strokeWidth={3}
-                            />
-                          );
+                        if (color.startsWith('#')) {
+                          const hex = color.replace('#', '');
+                          const r = parseInt(hex.substr(0, 2), 16);
+                          const g = parseInt(hex.substr(2, 2), 16);
+                          const b = parseInt(hex.substr(4, 2), 16);
+                          return (r * 299 + g * 587 + b * 114) / 1000 > 155;
                         }
+                        return false;
+                      };
 
-                        return (
-                          <g>
-                            <rect
-                              x={x}
-                              y={y}
-                              width={width}
-                              height={height}
-                              fill={colors[colorIndex]}
-                              stroke="#ffffff"
-                              strokeWidth={3}
-                            />
+                      const isLight = getIsLight(chartBgColor);
+                      const mainTextColor = isLight ? '#0f172a' : '#ffffff';
+                      const secondaryTextColor = isLight ? '#475569' : '#94a3b8';
+                      const axisLines = isLight ? '#94a3b8' : '#475569';
 
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 - 20}
-                              textAnchor="middle"
-                              fill="#ffffff"
-                              fontSize="18"
-                              fontWeight="bold"
-                              style={{
-                                textShadow: '2px 2px 4px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.7)',
-                                paintOrder: 'stroke fill',
-                                stroke: 'rgba(0,0,0,0.8)',
-                                strokeWidth: '3px',
-                                pointerEvents: 'none'
-                              }}
+                      const pad = { top: 40, right: 40, bottom: 100, left: 150 };
+                      const width = 850 - pad.left - pad.right;
+                      const height = 550 - pad.top - pad.bottom;
+                      const colors = PALETTES[colorPalette].colors;
+                      const grandTotal = contingencyTable.grand_total;
+
+                      // SEGURIDAD: Si no hay datos, no renderizar nada
+                      if (!grandTotal || grandTotal === 0) return null;
+
+                      return (
+                        <>
+                          {/* TÍTULO PROFESIONAL */}
+                          <div className="text-center space-y-2 mb-4">
+                            <h3
+                              className="text-4xl font-black tracking-tighter leading-none italic uppercase"
+                              style={{ color: mainTextColor, letterSpacing: '-0.02em' }}
                             >
-                              {label}
-                            </text>
+                              Análisis de Mosaico
+                            </h3>
+                            <div className="flex justify-center items-center gap-3 text-lg font-bold">
+                              <span style={{ color: '#6366f1' }}>{var1Label}</span>
+                              <span style={{ color: secondaryTextColor, opacity: 0.6 }}>VS</span>
+                              <span style={{ color: '#a855f7' }}>{var2Label}</span>
+                            </div>
+                            <div className="flex justify-center pt-2">
+                              <div className="h-1.5 w-32 rounded-full" style={{ background: 'linear-gradient(90deg, #6366f1, #a855f7)' }}></div>
+                            </div>
+                          </div>
 
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 + 5}
-                              textAnchor="middle"
-                              fill="#ffffff"
-                              fontSize="16"
-                              fontWeight="600"
-                              style={{
-                                textShadow: '2px 2px 4px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.7)',
-                                paintOrder: 'stroke fill',
-                                stroke: 'rgba(0,0,0,0.8)',
-                                strokeWidth: '2px',
-                                pointerEvents: 'none'
-                              }}
-                            >
-                              n = {value}
-                            </text>
+                          <div className="relative w-full overflow-x-auto flex justify-center py-4">
+                            <svg width="850" height="550" viewBox="0 0 850 550" className="max-w-full h-auto">
+                              <g>
+                                {/* EJE Y: Categorías Variable 1 */}
+                                {categories1.map((cat1, i) => {
+                                  const rowTotal = contingencyTable.row_totals[cat1] || 0;
+                                  const rowHeight = (rowTotal / grandTotal) * height;
+                                  let ySum = 0;
+                                  for (let j = 0; j < i; j++) {
+                                    ySum += ((contingencyTable.row_totals[categories1[j]] || 0) / grandTotal) * height;
+                                  }
 
-                            <text
-                              x={x + width / 2}
-                              y={y + height / 2 + 28}
-                              textAnchor="middle"
-                              fill="#ffffff"
-                              fontSize="15"
-                              fontWeight="500"
-                              style={{
-                                textShadow: '2px 2px 4px rgba(0,0,0,0.9), -1px -1px 2px rgba(0,0,0,0.7)',
-                                paintOrder: 'stroke fill',
-                                stroke: 'rgba(0,0,0,0.8)',
-                                strokeWidth: '2px',
-                                pointerEvents: 'none'
-                              }}
-                            >
-                              {percentage}%
-                            </text>
-                          </g>
-                        );
-                      }}
-                    />
-                  </ResponsiveContainer>
-                ) : (
+                                  return (
+                                    <g key={`y-axis-${i}`}>
+                                      <line x1={pad.left - 10} y1={pad.top + ySum + rowHeight / 2} x2={pad.left} y2={pad.top + ySum + rowHeight / 2} stroke={axisLines} strokeWidth="2" />
+                                      <text
+                                        x={pad.left - 20}
+                                        y={pad.top + ySum + rowHeight / 2}
+                                        textAnchor="end"
+                                        fill={mainTextColor}
+                                        fontSize="13"
+                                        fontWeight="800"
+                                        dominantBaseline="middle"
+                                      >
+                                        {cat1}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+
+                                {/* COLUMNAS Y CELDAS */}
+                                {categories2.map((cat2, idx2) => {
+                                  const colTotal = contingencyTable.col_totals[cat2] || 0;
+                                  const colWidth = (colTotal / grandTotal) * width;
+                                  let currentX = pad.left;
+                                  for (let k = 0; k < idx2; k++) {
+                                    currentX += ((contingencyTable.col_totals[categories2[k]] || 0) / grandTotal) * width;
+                                  }
+
+                                  let currentY = pad.top;
+
+                                  return (
+                                    <g key={`col-group-${idx2}`}>
+                                      {categories1.map((cat1, idx1) => {
+                                        const cellValue = (contingencyTable.table[cat1] && contingencyTable.table[cat1][cat2]) || 0;
+                                        const cellHeight = colTotal > 0 ? (cellValue / colTotal) * height : 0;
+                                        const drawY = currentY;
+                                        currentY += cellHeight;
+
+                                        return (
+                                          <g key={`cell-${idx1}-${idx2}`}>
+                                            <rect
+                                              x={currentX}
+                                              y={drawY}
+                                              width={Math.max(0, colWidth - 2)}
+                                              height={Math.max(0, cellHeight - 2)}
+                                              fill={colors[idx2 % colors.length]}
+                                              fillOpacity={1 - (idx1 * 0.15)}
+                                              stroke={isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)"}
+                                              strokeWidth="1.5"
+                                              rx="2"
+                                            />
+                                            {cellHeight > 25 && colWidth > 40 && (
+                                              <text
+                                                x={currentX + colWidth / 2}
+                                                y={drawY + cellHeight / 2}
+                                                textAnchor="middle"
+                                                fill={isLight && idx1 > 2 ? "#333" : "white"}
+                                                fontSize="14"
+                                                fontWeight="900"
+                                                style={{ textShadow: '0px 1px 3px rgba(0,0,0,0.3)' }}
+                                              >
+                                                {cellValue}
+                                              </text>
+                                            )}
+                                          </g>
+                                        );
+                                      })}
+                                      {/* EJE X: Etiquetas */}
+                                      <line x1={currentX + colWidth / 2} y1={pad.top + height} x2={currentX + colWidth / 2} y2={pad.top + height + 10} stroke={axisLines} strokeWidth="2" />
+                                      <text
+                                        x={currentX + colWidth / 2}
+                                        y={pad.top + height + 35}
+                                        textAnchor="middle"
+                                        fill={mainTextColor}
+                                        fontSize="13"
+                                        fontWeight="800"
+                                      >
+                                        {cat2}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+
+                                {/* MARCO EXTERIOR */}
+                                <rect x={pad.left} y={pad.top} width={width} height={height} fill="none" stroke={axisLines} strokeWidth="2" />
+                              </g>
+                            </svg>
+                          </div>
+
+                          {/* LEYENDA TIPO CHIP */}
+                          <div className="flex flex-wrap justify-center gap-4 p-6 rounded-2xl border" style={{ backgroundColor: isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.03)', borderColor: axisLines }}>
+                            {categories2.map((cat, idx) => (
+                              <div key={idx} className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/10 shadow-sm">
+                                <div
+                                  className="w-4 h-4 rounded-full"
+                                  style={{ backgroundColor: colors[idx % colors.length] }}
+                                />
+                                <span className="text-sm font-black uppercase tracking-widest" style={{ color: mainTextColor }}>
+                                  {cat}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+                {/* ================= OTROS GRÁFICOS ================= */}
+                {chartType !== 'mosaic' && (
                   <ResponsiveContainer width="100%" height={500}>
                     <BarChart
                       data={barData}
