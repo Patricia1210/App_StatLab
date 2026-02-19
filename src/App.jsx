@@ -742,6 +742,22 @@ const App = () => {
         />
       );
     }
+
+    // ==================== CAPÍTULO 4 ====================
+    // ✅ Lab 4.1 - Dos Variables Cualitativas
+    if (normalizedSection === "4.1" || normalizedSection === "lab-4-1" || normalizedSection === "4-1") {
+      return (
+        <LabRenderer
+          labKey="chapter4/Lab4_1"
+          goHome={goHome}
+          goToSection={goToSection}
+          setView={setView}
+          setSelectedSection={setSelectedSection}
+          selectedSection={normalizedSection}
+          activeSectionData={activeSectionData}
+        />
+      );
+    }
     // ==================== FALLBACK ====================
     // Cualquier otra sección no conectada
     return (
