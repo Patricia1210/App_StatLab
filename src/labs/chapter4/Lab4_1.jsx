@@ -3,18 +3,13 @@
 // Dos Variables Cualitativas (Categóricas)
 // CON PRÁCTICA APLICADA INTEGRADA
 // ============================================================
-// INSTRUCCIONES: 
-// 1. Copia este contenido al inicio de tu archivo Lab4_1.jsx
-// 2. Luego agrega la Parte 2
-// 3. Finalmente agrega la Parte 3
-// ============================================================
-
 import React, { useState, useEffect, useRef } from "react";
 import {
   ArrowLeft, BarChart3, Database, Eye, Download,
   Activity, Info, Upload, Lightbulb, AlertCircle,
   Settings, Target, Zap, CheckCircle, XCircle, Award, Brain,
-  Users, ShoppingCart, Heart, Percent, TrendingUp, Grid
+  Users, ShoppingCart, Heart, Percent, TrendingUp, Grid,
+  ShieldCheck, AlertTriangle
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -636,14 +631,61 @@ const Lab4_1 = ({ goHome, setView }) => {
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
+  const downloadContingencyTable = () => {
+    if (!contingencyTable) return;
+
+    const rows = [];
+    const header = [var1Label + ' / ' + var2Label, ...categories2, 'Total'];
+    rows.push(header);
+
+    categories1.forEach(cat1 => {
+      const row = [cat1];
+      categories2.forEach(cat2 => {
+        let val;
+        if (tableType === 'frequency') {
+          val = contingencyTable.table[cat1]?.[cat2] || 0;
+        } else if (tableType === 'percentTotal' && chiSquareResult) {
+          val = (chiSquareResult.percentageTotal[cat1]?.[cat2] || 0).toFixed(2) + '%';
+        } else if (tableType === 'percentRow' && chiSquareResult) {
+          val = (chiSquareResult.percentageRow[cat1]?.[cat2] || 0).toFixed(2) + '%';
+        } else if (tableType === 'percentColumn' && chiSquareResult) {
+          val = (chiSquareResult.percentageColumn[cat1]?.[cat2] || 0).toFixed(2) + '%';
+        }
+        row.push(val);
+      });
+      if (tableType === 'frequency') {
+        row.push(contingencyTable.row_totals[cat1]);
+      } else if (tableType === 'percentRow') {
+        row.push('100.00%');
+      } else {
+        row.push(((contingencyTable.row_totals[cat1] / contingencyTable.grand_total) * 100).toFixed(2) + '%');
+      }
+      rows.push(row);
+    });
+
+    const totalRow = ['Total'];
+    categories2.forEach(cat2 => {
+      if (tableType === 'frequency') {
+        totalRow.push(contingencyTable.col_totals[cat2]);
+      } else if (tableType === 'percentColumn') {
+        totalRow.push('100.00%');
+      } else {
+        totalRow.push(((contingencyTable.col_totals[cat2] / contingencyTable.grand_total) * 100).toFixed(2) + '%');
+      }
+    });
+    totalRow.push(tableType === 'frequency' ? contingencyTable.grand_total : '100.00%');
+    rows.push(totalRow);
+
+    const csvContent = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `tabla_contingencia_${tableType}_${datasetLabel.replace(/\s+/g, '_')}.csv`;
+    link.click();
+  };
   // ============================================================
   // LAB 4.1 - PARTE 2 de 3
   // Secciones: renderIntroTab() y renderDatasetsTab()
-  // ============================================================
-  // INSTRUCCIONES: 
-  // 1. Esta parte va DESPUÉS de la Parte 1
-  // 2. Copia este contenido continuando desde donde terminó la Parte 1
-  // 3. Luego agrega la Parte 3 al final
   // ============================================================
 
   // ============================================
@@ -841,7 +883,89 @@ const Lab4_1 = ({ goHome, setView }) => {
           </div>
         </div>
       </div>
+      <div className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8">
+        <h3 className="text-xl font-black text-white mb-2 flex items-center gap-2">
+          <ShieldCheck className="w-6 h-6 text-amber-400" />
+          Supuestos de Validez de la Prueba χ²
+        </h3>
+        <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+          La prueba Chi-cuadrado de Pearson <strong className="text-white">no puede aplicarse de forma indiscriminada</strong>.
+          Antes de interpretarla, debes verificar que se cumplen los siguientes cuatro supuestos:
+        </p>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="bg-gradient-to-br from-indigo-500/10 to-blue-500/10 border border-indigo-500/25 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-sm font-black text-indigo-300">1</div>
+              <h4 className="font-black text-white">Naturaleza de los Datos</h4>
+            </div>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Ambas variables deben ser <strong className="text-indigo-300">categóricas</strong> (nominales u ordinales).
+              La prueba <em>no aplica</em> a variables numéricas continuas sin categorizar previamente.
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/25 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-sm font-black text-purple-300">2</div>
+              <h4 className="font-black text-white">Independencia de Observaciones</h4>
+            </div>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Cada dato debe pertenecer a <strong className="text-purple-300">un solo individuo</strong> y cada individuo
+              solo puede estar representado en <strong className="text-purple-300">una única celda</strong> de la tabla.
+              Los grupos no deben solaparse.
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-teal-500/10 to-emerald-500/10 border border-teal-500/25 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-500/40 flex items-center justify-center text-sm font-black text-teal-300">3</div>
+              <h4 className="font-black text-white">Muestreo Aleatorio</h4>
+            </div>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Los datos deben provenir de una <strong className="text-teal-300">muestra aleatoria representativa</strong> de
+              la población de interés, para que las inferencias sean generalizables.
+            </p>
+          </div>
+
+          <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/25 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-sm font-black text-amber-300">4</div>
+              <h4 className="font-black text-white">Frecuencias Esperadas</h4>
+            </div>
+            <p className="text-sm text-slate-300 leading-relaxed mb-4">
+              Para que el cálculo sea válido se deben cumplir <strong className="text-amber-300">ambas condiciones</strong>:
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <CheckCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-300">
+                  Al menos el <strong className="text-white">80% de las celdas</strong> deben tener frecuencia esperada <strong className="text-white">&gt; 5</strong>.
+                </p>
+              </div>
+              <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                <CheckCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-300">
+                  <strong className="text-white">Ninguna celda</strong> debe tener frecuencia esperada <strong className="text-white">&lt; 1</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-start gap-3 p-5 bg-red-500/8 border border-red-500/25 rounded-2xl">
+          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-white mb-1">⚠️ ¿Qué pasa si no se cumplen los supuestos?</p>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Si el supuesto de frecuencias esperadas se viola, el estadístico χ² pierde su distribución teórica y el
+              p-value deja de ser confiable. En ese caso, se recomienda usar la{" "}
+              <strong className="text-red-300">Prueba Exacta de Fisher</strong> (para tablas 2×2) o combinar
+              categorías con pocas observaciones antes de aplicar la prueba.
+            </p>
+          </div>
+        </div>
+      </div>
       <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-3xl p-8">
         <div className="flex items-start gap-4">
           <Lightbulb className="w-6 h-6 text-yellow-400 shrink-0 mt-1" />
@@ -1429,16 +1553,26 @@ const Lab4_1 = ({ goHome, setView }) => {
               <div className="mt-6 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-black text-white">Tabla de Contingencia</h3>
-                  <select
-                    value={tableType}
-                    onChange={(e) => setTableType(e.target.value)}
-                    className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm font-bold"
-                  >
-                    <option value="frequency">Frecuencias</option>
-                    <option value="percentTotal">% del Total</option>
-                    <option value="percentRow">% por Fila</option>
-                    <option value="percentColumn">% por Columna</option>
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={tableType}
+                      onChange={(e) => setTableType(e.target.value)}
+                      className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm font-bold"
+                    >
+                      <option value="frequency">Frecuencias</option>
+                      <option value="percentTotal">% del Total</option>
+                      <option value="percentRow">% por Fila</option>
+                      <option value="percentColumn">% por Columna</option>
+                    </select>
+                    <button
+                      onClick={downloadContingencyTable}
+                      className="px-3 py-2 bg-indigo-500 hover:bg-indigo-600 rounded-lg font-bold text-sm flex items-center gap-2 transition-all shadow-lg shadow-indigo-500/20"
+                      title="Descargar tabla como CSV"
+                    >
+                      <Download className="w-4 h-4" />
+                      CSV
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -1514,15 +1648,9 @@ const Lab4_1 = ({ goHome, setView }) => {
       </div>
     );
   };
-
   // ============================================================
   // LAB 4.1 - PARTE 3 de 3 (FINAL)
   // Sección: renderPracticeTab() CON PRÁCTICA APLICADA + Render Principal
-  // ============================================================
-  // INSTRUCCIONES: 
-  // 1. Esta es la ÚLTIMA parte
-  // 2. Copia este contenido DESPUÉS de la Parte 2
-  // 3. ¡Listo! Archivo completo
   // ============================================================
 
   // ============================================
