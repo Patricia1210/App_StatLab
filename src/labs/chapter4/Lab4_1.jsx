@@ -3,13 +3,14 @@
 // Dos Variables Cualitativas (Categóricas)
 // CON PRÁCTICA APLICADA INTEGRADA
 // ============================================================
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   ArrowLeft, BarChart3, Database, Eye, Download,
   Activity, Info, Upload, Lightbulb, AlertCircle,
   Settings, Target, Zap, CheckCircle, XCircle, Award, Brain,
   Users, ShoppingCart, Heart, Percent, TrendingUp, Grid,
   ShieldCheck, AlertTriangle
+
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -182,7 +183,7 @@ const PRACTICE_QUESTIONS = [
     question: "¿Qué tipo de datos requiere el análisis de dos variables cualitativas?",
     options: [
       "Datos numéricos continuos",
-      "Datos categóricos o nominales",
+      "Datos ordinales o nominales",
       "Solo datos ordinales",
       "Datos de intervalo"
     ],
@@ -344,21 +345,20 @@ const prepareBarChartData = (data, chartType = 'grouped') => {
   }
 };
 
-const prepareMosaicData = (data) => {
-  if (!data || data.length === 0) return [];
-
-  const contingency = calculateContingencyTable(data);
+const prepareMosaicData = (contingency) => {
   if (!contingency) return [];
 
   const { table, row_totals, col_totals, grand_total } = contingency;
 
   const mosaicData = [];
   const rowLabels = Object.keys(table);
-  const colLabels = Object.keys(table[rowLabels[0]] || {});
+  const firstRow = rowLabels[0];
+  const colLabels = firstRow ? Object.keys(table[firstRow] || {}) : [];
+
 
   rowLabels.forEach((rowLabel, i) => {
     colLabels.forEach((colLabel, j) => {
-      const value = table[rowLabel][colLabel];
+      const value = table?.[rowLabel]?.[colLabel] ?? 0;
       mosaicData.push({
         name: `${rowLabel} - ${colLabel}`,
         x: colLabel,
@@ -411,6 +411,7 @@ const Lab4_1 = ({ goHome, setView }) => {
   const [practiceResults, setPracticeResults] = useState({});
   const [practiceScore, setPracticeScore] = useState(0);
   const [practiceMode, setPracticeMode] = useState('quiz');
+  const [uploadedRawData, setUploadedRawData] = useState([]);
 
   // Estados para práctica aplicada
   const [appliedConcept, setAppliedConcept] = useState({
@@ -490,6 +491,7 @@ const Lab4_1 = ({ goHome, setView }) => {
     if (!data || data.length === 0) return;
     const keys = Object.keys(data[0]);
 
+    setUploadedRawData(data);
     setUploadedColumns(keys);
     setSelectedDataset('');
     setDatasetLabel(filename.replace(/\.(csv|xlsx|xls)$/i, ''));
@@ -1061,9 +1063,10 @@ const Lab4_1 = ({ goHome, setView }) => {
                   <select
                     value={selectedVar1}
                     onChange={(e) => {
-                      setSelectedVar1(e.target.value);
-                      if (selectedVar2) {
-                        // Re-procesar datos
+                      const newVar1 = e.target.value;
+                      setSelectedVar1(newVar1);
+                      if (selectedVar2 && newVar1 !== selectedVar2) {
+                        processCustomData(uploadedRawData, newVar1, selectedVar2);
                       }
                     }}
                     className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white"
@@ -1077,9 +1080,10 @@ const Lab4_1 = ({ goHome, setView }) => {
                   <select
                     value={selectedVar2}
                     onChange={(e) => {
-                      setSelectedVar2(e.target.value);
-                      if (selectedVar1) {
-                        // Re-procesar datos
+                      const newVar2 = e.target.value;
+                      setSelectedVar2(newVar2);
+                      if (selectedVar1 && selectedVar1 !== newVar2) {
+                        processCustomData(uploadedRawData, selectedVar1, newVar2);
                       }
                     }}
                     className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white"
@@ -1248,7 +1252,6 @@ const Lab4_1 = ({ goHome, setView }) => {
                 </div>
 
                 {/* ================= MOSAICO ================= */}
-                {/* ================= MOSAICO CORREGIDO ================= */}
                 {chartType === 'mosaic' && contingencyTable && categories1.length > 0 && categories2.length > 0 && (
                   <div
                     className="space-y-6 p-8 rounded-3xl border transition-all duration-500 shadow-2xl"
