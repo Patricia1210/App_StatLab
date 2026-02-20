@@ -758,6 +758,20 @@ const App = () => {
         />
       );
     }
+    // ✅ Lab 4.2 - Dos Variables Cuantitativas
+    if (normalizedSection === "4.2" || normalizedSection === "lab-4-2" || normalizedSection === "4-2") {
+      return (
+        <LabRenderer
+          labKey="chapter4/Lab4_2"
+          goHome={goHome}
+          goToSection={goToSection}
+          setView={setView}
+          setSelectedSection={setSelectedSection}
+          selectedSection={normalizedSection}
+          activeSectionData={activeSectionData}
+        />
+      );
+    }
     // ==================== FALLBACK ====================
     // Cualquier otra sección no conectada
     return (
