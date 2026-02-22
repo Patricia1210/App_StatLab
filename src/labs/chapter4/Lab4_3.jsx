@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   ArrowLeft, Activity, Info, Database, Brain,
   BarChart3, Download, Upload, Settings, Eye,
@@ -264,8 +264,7 @@ export default function Lab4_3({ goHome, setView }) {
   const [pAnswers, setPAnswers] = useState({});
   const [pResults, setPResults] = useState({});
   const [pScore, setPScore] = useState(0);
-  const boxRef = useRef(null);
-  const barRef = useRef(null);
+
 
   const colors = PALETTES[palette].colors;
 
@@ -346,14 +345,75 @@ export default function Lab4_3({ goHome, setView }) {
     a.click();
   };
 
-  const downloadSVG = (ref, name) => {
-    const svg = ref.current?.querySelector("svg");
-    if (!svg) return;
-    const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${name}_${dsLabel}.svg`;
-    a.click();
+  const downloadPNG = (elementId, name) => {
+    // Cambiar a la pestaña correcta si es necesario
+    if (elementId === "boxplot-chart") setActiveViz("boxplot");
+    else if (elementId === "bars-chart") setActiveViz("bars");
+
+    // Esperar a que React renderice la pestaña antes de capturar
+    setTimeout(() => {
+      const container = document.getElementById(elementId);
+      if (!container) {
+        alert("El gráfico no está disponible. Asegúrate de estar viendo ese gráfico.");
+        return;
+      }
+      const svg = container.querySelector("svg");
+      if (!svg) {
+        alert("No se encontró el SVG. Intenta hacer clic en la pestaña del gráfico primero.");
+        return;
+      }
+
+      const bbox = svg.getBoundingClientRect();
+      const w = Math.max(bbox.width, 100) || 620;
+      const h = Math.max(bbox.height, 100) || 380;
+
+      // Clonar SVG y forzar atributos necesarios
+      const clone = svg.cloneNode(true);
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      clone.setAttribute("width", w);
+      clone.setAttribute("height", h);
+
+      // Copiar fill/stroke de elementos hijos (Recharts los pone como atributos inline, no CSS)
+      const srcEls = svg.querySelectorAll("[fill],[stroke]");
+      const clnEls = clone.querySelectorAll("[fill],[stroke]");
+      srcEls.forEach((el, i) => {
+        if (!clnEls[i]) return;
+        if (el.getAttribute("fill")) clnEls[i].setAttribute("fill", el.getAttribute("fill"));
+        if (el.getAttribute("stroke")) clnEls[i].setAttribute("stroke", el.getAttribute("stroke"));
+        if (el.getAttribute("fill-opacity")) clnEls[i].setAttribute("fill-opacity", el.getAttribute("fill-opacity"));
+      });
+
+      const svgStr = new XMLSerializer().serializeToString(clone);
+      const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+
+      img.onload = () => {
+        const scale = 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = w * scale;
+        canvas.height = h * scale;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(scale, scale);
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        const a = document.createElement("a");
+        a.href = canvas.toDataURL("image/png", 1.0);
+        a.download = `${name}_${dsLabel}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        alert("No se pudo exportar el gráfico. Intenta hacer clic en la pestaña primero y luego descargar.");
+      };
+
+      img.src = url;
+    }, 150);
   };
 
   // ── quiz ──
@@ -751,15 +811,15 @@ export default function Lab4_3({ goHome, setView }) {
                              border border-violet-500/25 rounded-xl font-bold text-sm text-violet-300 transition-all">
                   <Table className="w-4 h-4" /> Tabla de resumen (CSV)
                 </button>
-                <button onClick={() => downloadSVG(boxRef, "boxplot")}
+                <button onClick={() => downloadPNG("boxplot-chart", "boxplot")}
                   className="w-full flex items-center gap-2 px-4 py-3 bg-purple-500/15 hover:bg-purple-500/25
                              border border-purple-500/25 rounded-xl font-bold text-sm text-purple-300 transition-all">
-                  <BarChart2 className="w-4 h-4" /> Boxplot (SVG)
+                  <BarChart2 className="w-4 h-4" /> Boxplot (PNG)
                 </button>
-                <button onClick={() => downloadSVG(barRef, "barras")}
+                <button onClick={() => downloadPNG("bars-chart", "barras")}
                   className="w-full flex items-center gap-2 px-4 py-3 bg-fuchsia-500/15 hover:bg-fuchsia-500/25
                              border border-fuchsia-500/25 rounded-xl font-bold text-sm text-fuchsia-300 transition-all">
-                  <BarChart3 className="w-4 h-4" /> Gráfico de barras (SVG)
+                  <BarChart3 className="w-4 h-4" /> Gráfico de barras (PNG)
                 </button>
               </div>
             </div>
@@ -869,7 +929,7 @@ export default function Lab4_3({ goHome, setView }) {
 
                 {/* ─── BOXPLOT ─── */}
                 {activeViz === "boxplot" && (
-                  <div ref={boxRef}>
+                  <div id="boxplot-chart">
                     <BoxplotChart groupStats={groupStats} numLabel={numLabel} catLabel={catLabel} colors={colors} />
                     <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       {groupStats.map((g, i) => (
@@ -896,7 +956,7 @@ export default function Lab4_3({ goHome, setView }) {
 
                 {/* ─── BARRAS ─── */}
                 {activeViz === "bars" && (
-                  <div ref={barRef}>
+                  <div id="bars-chart">
                     <BarsChart />
                     <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       {groupStats.map((g, i) => (
