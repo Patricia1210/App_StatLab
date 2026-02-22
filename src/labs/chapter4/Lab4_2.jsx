@@ -3,7 +3,8 @@ import {
   ArrowLeft, BarChart3, Database, Eye, Download,
   Activity, Info, Upload, Lightbulb, AlertCircle,
   Settings, Target, Zap, CheckCircle, XCircle, Award, Brain,
-  TrendingUp, TrendingDown, Minus, Crosshair, Sigma, LineChart
+  TrendingUp, TrendingDown, Minus, Crosshair, Sigma, LineChart,
+  FlaskConical, AlertTriangle, Scale
 } from "lucide-react";
 import {
   ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis,
@@ -205,6 +206,31 @@ const PRACTICE_QUESTIONS = [
     ],
     correct: 1,
     explanation: "La correlación mide asociación estadística. Que dos variables estén correlacionadas no significa que una cause a la otra."
+  },
+  // ── NUEVAS: p-value ──────────────────────────────────────────────────────
+  {
+    id: 9,
+    question: "¿Qué mide el p-value en el contexto de la correlación?",
+    options: [
+      "La fuerza de la relación entre las variables",
+      "La probabilidad de obtener un r igual o mayor si la correlación real fuera 0",
+      "El porcentaje de varianza explicada",
+      "El valor esperado de la variable Y"
+    ],
+    correct: 1,
+    explanation: "El p-value indica qué tan probable sería observar ese r (o uno más extremo) si en realidad no existiera correlación en la población. Un p < 0.05 sugiere que la correlación es estadísticamente significativa."
+  },
+  {
+    id: 10,
+    question: "Tienes n = 500 y obtienes r = 0.09, p = 0.04. ¿Qué debes concluir?",
+    options: [
+      "Hay una correlación fuerte y significativa",
+      "La correlación es estadísticamente significativa pero prácticamente despreciable",
+      "El modelo explica el 9% de la varianza",
+      "El p-value confirma que la pendiente es negativa"
+    ],
+    correct: 1,
+    explanation: "Con muestras grandes (n = 500) el p-value puede ser significativo incluso para correlaciones ínfimas. r = 0.09 implica R² ≈ 0.008: apenas el 0.8% de la varianza explicada. Significancia estadística ≠ relevancia práctica."
   }
 ];
 
@@ -223,48 +249,51 @@ const computeStats = (data) => {
   const ssYY = ys.reduce((s, y) => s + (y - meanY) ** 2, 0);
   const ssXY = data.reduce((s, d) => s + (d.x - meanX) * (d.y - meanY), 0);
   const r = ssXX === 0 || ssYY === 0 ? 0 : ssXY / Math.sqrt(ssXX * ssYY);
-  const b = ssXX === 0 ? 0 : ssXY / ssXX;
-  const a = meanY - b * meanX;
+  // FIX: use rawB/rawA with full precision numbers to avoid rounding errors
+  const rawB = ssXX === 0 ? 0 : ssXY / ssXX;
+  const rawA = meanY - rawB * meanX;
   const r2 = r * r;
 
-  // p-value aproximado para correlación (t-test)
+  // t-statistic for H0: rho = 0
   const t = r * Math.sqrt((n - 2) / (1 - r * r + 1e-12));
   const df = n - 2;
-  // Aproximación del p-value usando distribución t
   const pValue = approximatePValue(Math.abs(t), df);
 
-  const interpretR = () => {
-    const abs = Math.abs(r);
-    if (abs < 0.1) return { label: "Sin correlación", color: "#64748b" };
-    if (abs < 0.3) return { label: "Correlación débil", color: "#f59e0b" };
-    if (abs < 0.5) return { label: "Correlación moderada", color: "#f97316" };
-    if (abs < 0.7) return { label: "Correlación moderada-fuerte", color: "#ef4444" };
-    return { label: "Correlación fuerte", color: "#10b981" };
+  // Strength classification — unified across the entire component
+  const getStrength = (absR) => {
+    if (absR < 0.1) return { label: "Sin correlación", key: "ninguna", color: "#64748b" };
+    if (absR < 0.3) return { label: "Correlación débil", key: "debil", color: "#f59e0b" };
+    if (absR < 0.7) return { label: "Correlación moderada", key: "moderada", color: "#f97316" };
+    return { label: "Correlación fuerte", key: "fuerte", color: "#10b981" };
   };
 
-  const trendLabel = r > 0.2 ? "positiva" : r < -0.2 ? "negativa" : "nula";
+  const abs = Math.abs(r);
+  const strengthInfo = getStrength(abs);
+  const trendLabel = r > 0.1 ? "positiva" : r < -0.1 ? "negativa" : "nula";
+
+  // Detect misleading significance: significant but very weak
+  const misleadingSignificance = pValue < 0.05 && abs < 0.1;
 
   return {
-    n, meanX, meanY, r: r.toFixed(4), r2: r2.toFixed(4),
-    a: a.toFixed(3), b: b.toFixed(3),
+    n, meanX, meanY,
+    r: r.toFixed(4), r2: r2.toFixed(4),
+    a: rawA.toFixed(3), b: rawB.toFixed(3),
     tStat: t.toFixed(3), df, pValue: pValue.toFixed(4),
     significant: pValue < 0.05,
-    interpretation: interpretR(),
+    misleadingSignificance,
+    strengthInfo,
     trendLabel,
-    rawR: r, rawA: a, rawB: b
+    rawR: r, rawA, rawB,
+    getStrength
   };
 };
 
 const approximatePValue = (t, df) => {
-  // Approximation using normal distribution for large df, otherwise rough estimate
   if (df <= 0) return 1;
-  // Two-tailed p-value approximation
   const x = df / (df + t * t);
-  let betaInc = 0;
-  // Simple numerical approximation
   const a = df / 2;
   const b = 0.5;
-  betaInc = incompleteBeta(x, a, b);
+  const betaInc = incompleteBeta(x, a, b);
   return Math.min(1, Math.max(0, betaInc));
 };
 
@@ -285,7 +314,6 @@ const incompleteBeta = (x, a, b) => {
 
 const lgamma = (n) => {
   if (n <= 0) return 0;
-  // Stirling approximation
   if (n < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * n)) - lgamma(1 - n);
   n -= 1;
   let x = 0.99999999999980993;
@@ -419,6 +447,7 @@ const Lab4_2 = ({ goHome, setView }) => {
   const handlePredict = () => {
     const xVal = parseFloat(predictionX);
     if (isNaN(xVal) || !stats) return;
+    // FIX: use rawA and rawB (numbers) for accurate prediction
     const yPred = stats.rawA + stats.rawB * xVal;
     setPredictionResult({ x: xVal, y: yPred.toFixed(3) });
   };
@@ -444,6 +473,8 @@ const Lab4_2 = ({ goHome, setView }) => {
     }
     const r = parseFloat(stats.r);
     const abs = Math.abs(r);
+
+    // FIX: use same unified thresholds as computeStats
     let strengthReal;
     if (abs < 0.1) strengthReal = "ninguna";
     else if (abs < 0.3) strengthReal = "debil";
@@ -453,8 +484,8 @@ const Lab4_2 = ({ goHome, setView }) => {
     const signReal = r > 0.1 ? "positiva" : r < -0.1 ? "negativa" : "nula";
 
     let trendReal;
-    if (r > 0.2) trendReal = "positiva";
-    else if (r < -0.2) trendReal = "negativa";
+    if (r > 0.1) trendReal = "positiva";
+    else if (r < -0.1) trendReal = "negativa";
     else trendReal = "ninguna";
 
     const s1 = appliedAnswers.trend === trendReal;
@@ -465,7 +496,12 @@ const Lab4_2 = ({ goHome, setView }) => {
     setAppliedFeedback({
       score, total: 3,
       details: { trend: { correct: s1, real: trendReal }, rStrength: { correct: s2, real: strengthReal }, rSign: { correct: s3, real: signReal } },
-      r: stats.r, r2: stats.r2, a: stats.a, b: stats.b
+      r: stats.r, r2: stats.r2, a: stats.a, b: stats.b,
+      significant: stats.significant,
+      pValue: stats.pValue,
+      n: stats.n,
+      strengthLabel: stats.strengthInfo.label,
+      misleadingSignificance: stats.misleadingSignificance
     });
   };
 
@@ -491,6 +527,7 @@ const Lab4_2 = ({ goHome, setView }) => {
   // ===================== INTRO =====================
   const renderIntro = () => (
     <div className="space-y-8">
+      {/* Qué son variables cuantitativas */}
       <div className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-3xl p-8">
         <div className="flex items-start gap-4 mb-6">
           <div className="p-3 bg-cyan-500/20 rounded-xl"><LineChart className="w-8 h-8 text-cyan-400" /></div>
@@ -517,7 +554,7 @@ const Lab4_2 = ({ goHome, setView }) => {
         </div>
       </div>
 
-      {/* Sección: Tendencias */}
+      {/* Tipos de tendencia */}
       <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-8">
         <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2">
           <Activity className="w-6 h-6 text-indigo-400" /> Tipos de Tendencia
@@ -540,7 +577,7 @@ const Lab4_2 = ({ goHome, setView }) => {
         </div>
       </div>
 
-      {/* Sección: Correlación de Pearson */}
+      {/* Correlación de Pearson */}
       <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-8">
         <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2">
           <Sigma className="w-6 h-6 text-purple-400" /> Coeficiente de Correlación de Pearson (r)
@@ -579,7 +616,123 @@ const Lab4_2 = ({ goHome, setView }) => {
         </div>
       </div>
 
-      {/* Sección: Regresión Lineal */}
+      {/* ── NUEVO BLOQUE: r vs p-value ─────────────────────────────────────── */}
+      <div className="bg-slate-900/60 border border-amber-500/20 rounded-3xl p-8">
+        <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2">
+          <Scale className="w-6 h-6 text-amber-400" />
+          📌 Diferencia clave: <span className="text-cyan-400 ml-1">r</span> vs <span className="text-amber-400 ml-1">p-value</span>
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          {/* r */}
+          <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                <span className="text-cyan-300 font-black text-lg">r</span>
+              </div>
+              <div>
+                <p className="font-black text-white">Coeficiente de Correlación</p>
+                <p className="text-xs text-cyan-400 font-bold">Magnitud del efecto</p>
+              </div>
+            </div>
+            <ul className="space-y-2 text-sm text-slate-300">
+              <li className="flex items-start gap-2"><span className="text-cyan-400 mt-0.5">▸</span> Mide la <strong className="text-white">fuerza y dirección</strong> de la relación</li>
+              <li className="flex items-start gap-2"><span className="text-cyan-400 mt-0.5">▸</span> Rango: <strong className="text-white">−1 a +1</strong></li>
+              <li className="flex items-start gap-2"><span className="text-cyan-400 mt-0.5">▸</span> Indica <strong className="text-white">qué tan grande es el efecto</strong> en los datos</li>
+              <li className="flex items-start gap-2"><span className="text-cyan-400 mt-0.5">▸</span> <strong className="text-white">No depende del n</strong> directamente</li>
+            </ul>
+            <div className="mt-4 p-3 bg-slate-900/40 rounded-lg">
+              <p className="text-xs text-slate-400">Ejemplo: <span className="text-cyan-300 font-bold">r = 0.85</span> → relación lineal fuerte y positiva</p>
+            </div>
+          </div>
+
+          {/* p-value */}
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                <span className="text-amber-300 font-black text-lg">p</span>
+              </div>
+              <div>
+                <p className="font-black text-white">p-value (valor p)</p>
+                <p className="text-xs text-amber-400 font-bold">Significancia estadística</p>
+              </div>
+            </div>
+            <ul className="space-y-2 text-sm text-slate-300">
+              <li className="flex items-start gap-2"><span className="text-amber-400 mt-0.5">▸</span> Evalúa si la correlación es <strong className="text-white">distinta de 0 en la población</strong></li>
+              <li className="flex items-start gap-2"><span className="text-amber-400 mt-0.5">▸</span> Rango: <strong className="text-white">0 a 1</strong></li>
+              <li className="flex items-start gap-2"><span className="text-amber-400 mt-0.5">▸</span> Indica <strong className="text-white">evidencia estadística</strong>, no magnitud</li>
+              <li className="flex items-start gap-2"><span className="text-amber-400 mt-0.5">▸</span> <strong className="text-white">Muy sensible al tamaño de muestra (n)</strong></li>
+            </ul>
+            <div className="mt-4 p-3 bg-slate-900/40 rounded-lg">
+              <p className="text-xs text-slate-400">Ejemplo: <span className="text-amber-300 font-bold">p = 0.03</span> → significativo al 5% (si n es suficiente)</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Zona de advertencia */}
+        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 text-red-400 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-black text-white mb-2">⚠️ Trampa frecuente: Significativo ≠ Importante</h4>
+              <p className="text-sm text-slate-300 leading-relaxed mb-3">
+                Una correlación puede ser <strong className="text-green-400">estadísticamente significativa</strong> (p &lt; 0.05)
+                pero <strong className="text-red-400">prácticamente despreciable</strong> en magnitud, especialmente
+                cuando <strong className="text-white">n es muy grande</strong>.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  { n: "n = 10", r: "r = 0.63", p: "p = 0.049", verdict: "Significativo", color: "text-green-400", bg: "bg-green-500/10" },
+                  { n: "n = 100", r: "r = 0.20", p: "p = 0.046", verdict: "Significativo — ¡pero débil!", color: "text-amber-400", bg: "bg-amber-500/10" },
+                  { n: "n = 1000", r: "r = 0.06", p: "p = 0.047", verdict: "Significativo — ¡pero ínfimo!", color: "text-red-400", bg: "bg-red-500/10" }
+                ].map((ex, i) => (
+                  <div key={i} className={`${ex.bg} rounded-xl p-4 border border-white/10`}>
+                    <p className="text-xs text-slate-400 mb-1">{ex.n}</p>
+                    <p className="text-lg font-black text-white">{ex.r}</p>
+                    <p className="text-sm text-slate-300">{ex.p}</p>
+                    <p className={`text-xs font-bold mt-2 ${ex.color}`}>{ex.verdict}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-slate-400 mt-3 italic">
+                💡 Por eso siempre hay que interpretar <strong className="text-white">r y p-value juntos</strong>,
+                considerando también el tamaño de muestra y el contexto.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Resumen visual comparativo */}
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10">
+                <th className="text-left py-3 px-4 text-slate-400 font-bold">Característica</th>
+                <th className="text-center py-3 px-4 text-cyan-400 font-bold">r (correlación)</th>
+                <th className="text-center py-3 px-4 text-amber-400 font-bold">p-value</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {[
+                ["¿Qué mide?", "Fuerza y dirección", "Evidencia contra H₀: ρ = 0"],
+                ["Rango", "−1 a +1", "0 a 1"],
+                ["¿Depende de n?", "Poco", "Mucho"],
+                ["¿Indica magnitud?", "✅ Sí", "❌ No"],
+                ["¿Indica significancia?", "❌ No", "✅ Sí"],
+                ["Umbral habitual", "|r| ≥ 0.7 = fuerte", "p < 0.05 = significativo"],
+              ].map(([feat, rVal, pVal], i) => (
+                <tr key={i} className="hover:bg-white/5 transition-colors">
+                  <td className="py-3 px-4 text-slate-300 font-medium">{feat}</td>
+                  <td className="py-3 px-4 text-center text-cyan-300">{rVal}</td>
+                  <td className="py-3 px-4 text-center text-amber-300">{pVal}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Regresión Lineal */}
       <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-8">
         <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2">
           <LineChart className="w-6 h-6 text-cyan-400" /> Regresión Lineal Simple
@@ -684,7 +837,7 @@ const Lab4_2 = ({ goHome, setView }) => {
                   {[["Variable X (independiente)", selectedXCol, setSelectedXCol], ["Variable Y (dependiente)", selectedYCol, setSelectedYCol]].map(([lbl, val, setter], i) => (
                     <div key={i}>
                       <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{lbl}</label>
-                      <select value={val} onChange={e => { setter(e.target.value); const other = i === 0 ? selectedYCol : selectedXCol; const xc = i === 0 ? e.target.value : selectedXCol; const yc = i === 1 ? e.target.value : selectedYCol; buildFromCols(rawUploadedData, xc, yc); }}
+                      <select value={val} onChange={e => { setter(e.target.value); const xc = i === 0 ? e.target.value : selectedXCol; const yc = i === 1 ? e.target.value : selectedYCol; buildFromCols(rawUploadedData, xc, yc); }}
                         className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white">
                         {uploadedColumns.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
@@ -808,7 +961,14 @@ const Lab4_2 = ({ goHome, setView }) => {
                       label={{ value: xLabel, position: "insideBottom", offset: -15, style: { fill: textColor, fontWeight: 700, fontSize: 11 } }} />
                     <YAxis dataKey="y" type="number" name={yLabel} domain={["auto", "auto"]}
                       tick={{ fill: textColor, fontSize: 11 }}
-                      label={{ value: yLabel, angle: -90, position: "insideLeft", offset: 10, style: { fill: textColor, fontWeight: 700, fontSize: 11 } }} />
+                      label={{
+                        value: yLabel,
+                        angle: -90,
+                        position: "insideLeft",
+                        offset: 20,
+                        style: { fill: textColor, fontWeight: 700, fontSize: 11, textAnchor: "middle" }
+                      }}
+                    />
                     <Tooltip content={<CustomTooltip />} />
                     <Scatter data={activeData} shape={<CustomDot />} />
                     {showRegression && regressionLine.length === 2 && (
@@ -833,7 +993,7 @@ const Lab4_2 = ({ goHome, setView }) => {
                 {/* Métricas clave */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { label: "Correlación (r)", value: stats.r, color: "text-cyan-400", sub: stats.interpretation.label },
+                    { label: "Correlación (r)", value: stats.r, color: "text-cyan-400", sub: stats.strengthInfo.label },
                     { label: "R² (coef. det.)", value: stats.r2, color: "text-purple-400", sub: `${(parseFloat(stats.r2) * 100).toFixed(1)}% varianza explicada` },
                     { label: "Intercepto (a)", value: stats.a, color: "text-pink-400", sub: `y cuando x = 0` },
                     { label: "Pendiente (b)", value: stats.b, color: "text-amber-400", sub: "cambio en y por unidad x" }
@@ -855,20 +1015,37 @@ const Lab4_2 = ({ goHome, setView }) => {
                         ŷ = {stats.a} + ({stats.b})·x
                       </p>
                     </div>
-                    <div className={`px-4 py-2 rounded-xl border ${stats.significant
-                      ? "bg-green-500/10 border-green-500/30" : "bg-orange-500/10 border-orange-500/30"}`}>
-                      <p className="text-xs font-bold mb-0.5" style={{ color: stats.significant ? "#4ade80" : "#fb923c" }}>
-                        {stats.significant ? "✅ Correlación Significativa" : "⚠️ No significativa"}
-                      </p>
-                      <p className="text-[10px] text-slate-400">p-value ≈ {stats.pValue} (n={stats.n})</p>
+
+                    {/* ── MEJORADO: badge de significancia con magnitud y advertencia ── */}
+                    <div className="flex flex-col gap-2">
+                      <div className={`px-4 py-2 rounded-xl border ${stats.significant
+                        ? "bg-green-500/10 border-green-500/30" : "bg-orange-500/10 border-orange-500/30"}`}>
+                        <p className="text-xs font-bold mb-0.5" style={{ color: stats.significant ? "#4ade80" : "#fb923c" }}>
+                          {stats.significant ? "✅ Correlación Significativa" : "⚠️ No significativa"}
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          p-value ≈ {stats.pValue} | n = {stats.n} | {stats.strengthInfo.label}
+                        </p>
+                      </div>
+                      {/* Advertencia de significancia engañosa */}
+                      {stats.misleadingSignificance && (
+                        <div className="px-4 py-2 rounded-xl border bg-red-500/10 border-red-500/30 flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                          <p className="text-[10px] text-red-300 font-bold leading-tight">
+                            Significativo estadísticamente, pero r es prácticamente nulo. El n grande infla la significancia.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
+
                   <div className="mt-4 p-3 bg-slate-900/30 rounded-lg">
                     <p className="text-sm text-slate-300 leading-relaxed">
                       <strong className="text-cyan-400">Interpretación: </strong>
-                      {parseFloat(stats.b) >= 0
+                      {/* FIX: use rawB (number) for conditional, stats.b (string) only for display */}
+                      {stats.rawB >= 0
                         ? `Por cada unidad que aumenta ${xLabel}, ${yLabel} aumenta en promedio ${stats.b} unidades.`
-                        : `Por cada unidad que aumenta ${xLabel}, ${yLabel} disminuye en promedio ${Math.abs(parseFloat(stats.b))} unidades.`
+                        : `Por cada unidad que aumenta ${xLabel}, ${yLabel} disminuye en promedio ${Math.abs(parseFloat(stats.b)).toFixed(3)} unidades.`
                       }
                       {" "}El modelo explica el <strong className="text-purple-400">{(parseFloat(stats.r2) * 100).toFixed(1)}%</strong> de la variabilidad.
                     </p>
@@ -1027,11 +1204,37 @@ const Lab4_2 = ({ goHome, setView }) => {
                             </div>
                           ))}
                         </div>
-                        <div className="mt-4 p-4 bg-slate-900/40 rounded-xl">
-                          <p className="text-sm font-bold text-white mb-2">Estadísticos del dataset:</p>
-                          <p className="text-sm text-slate-300">r = <span className="text-cyan-400 font-black">{appliedFeedback.r}</span> | R² = <span className="text-purple-400 font-black">{appliedFeedback.r2}</span></p>
-                          <p className="text-sm text-slate-300 mt-1">Ecuación: ŷ = <span className="text-amber-400 font-bold">{appliedFeedback.a}</span> + <span className="text-amber-400 font-bold">{appliedFeedback.b}</span>·x</p>
+
+                        {/* ── MEJORADO: feedback con r, p-value y magnitud juntos ── */}
+                        <div className="mt-4 p-4 bg-slate-900/40 rounded-xl space-y-3">
+                          <p className="text-sm font-bold text-white mb-1">Estadísticos del dataset:</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-cyan-500/10 rounded-lg p-3">
+                              <p className="text-xs text-slate-400">Correlación (r)</p>
+                              <p className="text-lg font-black text-cyan-400">{appliedFeedback.r}</p>
+                              <p className="text-xs text-slate-400 mt-1">{appliedFeedback.strengthLabel}</p>
+                            </div>
+                            <div className={`rounded-lg p-3 ${appliedFeedback.significant ? "bg-green-500/10" : "bg-orange-500/10"}`}>
+                              <p className="text-xs text-slate-400">p-value (n={appliedFeedback.n})</p>
+                              <p className={`text-lg font-black ${appliedFeedback.significant ? "text-green-400" : "text-orange-400"}`}>
+                                {appliedFeedback.pValue}
+                              </p>
+                              <p className="text-xs text-slate-400 mt-1">
+                                {appliedFeedback.significant ? "✅ Significativo (p < 0.05)" : "⚠️ No significativo"}
+                              </p>
+                            </div>
+                          </div>
+                          {appliedFeedback.misleadingSignificance && (
+                            <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                              <p className="text-xs text-red-300">
+                                <strong>Atención:</strong> el p-value es significativo pero r es casi nulo. Con n grande, la significancia estadística puede ser engañosa. Siempre analiza r y p juntos.
+                              </p>
+                            </div>
+                          )}
+                          <p className="text-sm text-slate-300">R² = <span className="text-purple-400 font-black">{appliedFeedback.r2}</span> — Ecuación: ŷ = <span className="text-amber-400 font-bold">{appliedFeedback.a}</span> + <span className="text-amber-400 font-bold">{appliedFeedback.b}</span>·x</p>
                         </div>
+
                         <button onClick={() => { setAppliedFeedback(null); setAppliedAnswers({ trend: null, rStrength: null, rSign: null }); }}
                           className="mt-4 px-6 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-lg font-bold text-white transition-all">
                           Intentar de Nuevo
@@ -1062,7 +1265,7 @@ const Lab4_2 = ({ goHome, setView }) => {
                     <div className="flex items-center gap-1 mt-1 justify-end">
                       {practiceScore === PRACTICE_QUESTIONS.length
                         ? <><Award className="w-4 h-4 text-yellow-400" /><span className="text-xs text-yellow-400 font-bold">¡Perfecto!</span></>
-                        : practiceScore >= 6
+                        : practiceScore >= Math.round(PRACTICE_QUESTIONS.length * 0.75)
                           ? <span className="text-xs text-green-400 font-bold">¡Muy bien!</span>
                           : <span className="text-xs text-orange-400 font-bold">Sigue practicando</span>}
                     </div>
@@ -1183,7 +1386,6 @@ const Lab4_2 = ({ goHome, setView }) => {
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-8 relative">
         {/* Header */}
         <section className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 border-l-4 border-l-cyan-500 relative overflow-hidden">
-          {/* Marca de agua — igual estilo que Lab 4.1 */}
           <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
             <div className="w-64 h-64 rounded-3xl border-8 border-cyan-400 flex items-center justify-center">
               <TrendingUp className="w-40 h-40 text-cyan-400" />
