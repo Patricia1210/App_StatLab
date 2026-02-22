@@ -435,13 +435,17 @@ const App = () => {
               <div className="relative z-10 flex flex-col items-center text-center">
                 <div className="relative mb-6">
                   <div className="absolute -inset-3 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full opacity-20 blur-xl group-hover:opacity-40 transition-opacity"></div>
-                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white text-4xl font-black shadow-2xl relative">
-                    LC
+                  <div className="w-32 h-32 rounded-full shadow-2xl relative overflow-hidden">
+                    <img
+                      src="/luis.jpg"
+                      alt="Luis Corona Alcantar"
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                 </div>
                 <h3 className="text-3xl font-black text-white mb-2">Luis Corona Alcantar</h3>
                 <div className="px-4 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-full mb-6">
-                  <span className="text-blue-400 font-black text-xs uppercase tracking-wider">Director de Investigación</span>
+                  <span className="text-blue-400 font-black text-xs uppercase tracking-wider">Director Académico</span>
                 </div>
                 <div className="bg-slate-900/50 rounded-2xl p-6 mb-6 border border-white/5">
                   <Quote className="w-6 h-6 text-blue-400/40 mb-3" />
@@ -466,13 +470,17 @@ const App = () => {
               <div className="relative z-10 flex flex-col items-center text-center">
                 <div className="relative mb-6">
                   <div className="absolute -inset-3 bg-gradient-to-br from-pink-500 to-fuchsia-500 rounded-full opacity-20 blur-xl group-hover:opacity-40 transition-opacity"></div>
-                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-pink-500 to-fuchsia-500 flex items-center justify-center text-white text-4xl font-black shadow-2xl relative">
-                    PH
+                  <div className="w-32 h-32 rounded-full shadow-2xl relative overflow-hidden">
+                    <img
+                      src="/patricia.jpg"
+                      alt="Patricia Herrejón Calderón"
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                 </div>
                 <h3 className="text-3xl font-black text-white mb-2">Patricia Herrejón Calderón</h3>
                 <div className="px-4 py-1.5 bg-pink-500/10 border border-pink-500/30 rounded-full mb-6">
-                  <span className="text-pink-400 font-black text-xs uppercase tracking-wider">Arquitecta de Software</span>
+                  <span className="text-pink-400 font-black text-xs uppercase tracking-wider">Ingeniera de Software</span>
                 </div>
                 <div className="bg-slate-900/50 rounded-2xl p-6 mb-6 border border-white/5">
                   <Quote className="w-6 h-6 text-pink-400/40 mb-3" />
@@ -763,6 +771,20 @@ const App = () => {
       return (
         <LabRenderer
           labKey="chapter4/Lab4_2"
+          goHome={goHome}
+          goToSection={goToSection}
+          setView={setView}
+          setSelectedSection={setSelectedSection}
+          selectedSection={normalizedSection}
+          activeSectionData={activeSectionData}
+        />
+      );
+    }
+    // ✅ Lab 4.3 - Variable Categórica y Numérica
+    if (normalizedSection === "4.3" || normalizedSection === "lab-4-3" || normalizedSection === "4-3") {
+      return (
+        <LabRenderer
+          labKey="chapter4/Lab4_3"
           goHome={goHome}
           goToSection={goToSection}
           setView={setView}
