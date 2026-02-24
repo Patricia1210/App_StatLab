@@ -81,12 +81,8 @@ const BOOK_STRUCTURE = [
     icon: <PieChart className="w-6 h-6" />,
     color: "from-indigo-500 to-purple-600",
     sections: [
-      { id: "5.1", title: "Conceptos Básicos", hasLab: true },
-      { id: "5.2", title: "Distribución Binomial", hasLab: true },
-      { id: "5.3", title: "Distribución Uniforme", hasLab: true },
-      { id: "5.4", title: "Distribución de Poisson", hasLab: true },
-      { id: "5.5", title: "Distribución Hipergeométrica", hasLab: true },
-      { id: "5.6", title: "Distribución Normal", hasLab: true }
+      { id: "5.1", title: "Fundamentos de Probabilidad", hasLab: true },
+      { id: "5.2", title: "Modelos de Distribución Discreta", hasLab: true },
     ]
   },
   {
@@ -785,6 +781,22 @@ const App = () => {
       return (
         <LabRenderer
           labKey="chapter4/Lab4_3"
+          goHome={goHome}
+          goToSection={goToSection}
+          setView={setView}
+          setSelectedSection={setSelectedSection}
+          selectedSection={normalizedSection}
+          activeSectionData={activeSectionData}
+        />
+      );
+    }
+
+    // ==================== CAPÍTULO 5 ====================
+    // ✅ Lab 5.1 - Introducción a Distribuciones de Probabilidad
+    if (normalizedSection === "5.1" || normalizedSection === "lab-5-1" || normalizedSection === "5-1") {
+      return (
+        <LabRenderer
+          labKey="chapter5/Lab5_1"
           goHome={goHome}
           goToSection={goToSection}
           setView={setView}
