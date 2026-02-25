@@ -228,7 +228,6 @@ const computeStats = (data) => {
   const rawA = meanY - rawB * meanX;
   const r2 = r * r;
 
-  // Strength classification
   const getStrength = (absR) => {
     if (absR < 0.1) return { label: "Sin correlación", key: "ninguna", color: "#64748b" };
     if (absR < 0.3) return { label: "Correlación débil", key: "debil", color: "#f59e0b" };
@@ -244,8 +243,7 @@ const computeStats = (data) => {
     n, meanX, meanY,
     r: r.toFixed(4), r2: r2.toFixed(4),
     a: rawA.toFixed(3), b: rawB.toFixed(3),
-    strengthInfo,
-    trendLabel,
+    strengthInfo, trendLabel,
     rawR: r, rawA, rawB,
     getStrength
   };
@@ -268,6 +266,19 @@ const PALETTES = {
   forest: { name: "Bosque", dot: "#10b981", line: "#059669", bg: "#10b981" },
   sunset: { name: "Atardecer", dot: "#f97316", line: "#ef4444", bg: "#f97316" },
   violet: { name: "Violeta", dot: "#a855f7", line: "#7c3aed", bg: "#a855f7" }
+};
+
+// ── Derive axis/text colors from chosen chart background ──
+const getChartColors = (chartBg) => {
+  const light = chartBg === "#ffffff" || chartBg === "#f5f5f5";
+  const veryDark = chartBg === "#000000";
+  return {
+    isLight: light,
+    textColor: light ? "#1e293b" : "#e2e8f0",
+    tickColor: light ? "#475569" : "#94a3b8",
+    gridColor: light ? "rgba(30,41,59,0.15)" : "rgba(148,163,184,0.1)",
+    subColor: light ? "#64748b" : "#64748b",
+  };
 };
 
 // ============================================
@@ -397,7 +408,6 @@ const Lab4_2 = ({ goHome, setView }) => {
     }
     const r = parseFloat(stats.r);
     const abs = Math.abs(r);
-
     let strengthReal;
     if (abs < 0.1) strengthReal = "ninguna";
     else if (abs < 0.3) strengthReal = "debil";
@@ -405,11 +415,7 @@ const Lab4_2 = ({ goHome, setView }) => {
     else strengthReal = "fuerte";
 
     const signReal = r > 0.1 ? "positiva" : r < -0.1 ? "negativa" : "nula";
-
-    let trendReal;
-    if (r > 0.1) trendReal = "positiva";
-    else if (r < -0.1) trendReal = "negativa";
-    else trendReal = "ninguna";
+    const trendReal = r > 0.1 ? "positiva" : r < -0.1 ? "negativa" : "ninguna";
 
     const s1 = appliedAnswers.trend === trendReal;
     const s2 = appliedAnswers.rStrength === strengthReal;
@@ -418,36 +424,89 @@ const Lab4_2 = ({ goHome, setView }) => {
 
     setAppliedFeedback({
       score, total: 3,
-      details: { trend: { correct: s1, real: trendReal }, rStrength: { correct: s2, real: strengthReal }, rSign: { correct: s3, real: signReal } },
+      details: {
+        trend: { correct: s1, real: trendReal },
+        rStrength: { correct: s2, real: strengthReal },
+        rSign: { correct: s3, real: signReal }
+      },
       r: stats.r, r2: stats.r2, a: stats.a, b: stats.b,
       n: stats.n,
       strengthLabel: stats.strengthInfo.label
     });
   };
 
+  // ── exportChart: captura SVG + agrega título + respeta fondo elegido ──
   const exportChart = () => {
     if (!chartRef.current) return;
     const svg = chartRef.current.querySelector("svg");
     if (!svg) return;
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+
+    const bbox = svg.getBoundingClientRect();
+    const w = Math.max(bbox.width, 100) || 660;
+    const h = Math.max(bbox.height, 100) || 440;
+
+    // Clone + fix attributes so the PNG captures colors
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("width", w);
+    clone.setAttribute("height", h);
+    const srcEls = svg.querySelectorAll("[fill],[stroke]");
+    const clnEls = clone.querySelectorAll("[fill],[stroke]");
+    srcEls.forEach((el, i) => {
+      if (!clnEls[i]) return;
+      ["fill", "stroke", "fill-opacity", "stroke-opacity"].forEach(attr => {
+        const v = el.getAttribute(attr);
+        if (v) clnEls[i].setAttribute(attr, v);
+      });
+    });
+
+    const svgStr = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
     const img = new Image();
+
     img.onload = () => {
-      canvas.width = img.width; canvas.height = img.height;
-      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
-      const link = document.createElement("a");
-      link.download = `scatter_${datasetLabel.replace(/\s+/g, "_")}.png`;
-      link.href = canvas.toDataURL(); link.click();
+      const scale = 2;
+      const titleH = 56; // px of header above chart
+      const canvas = document.createElement("canvas");
+      canvas.width = w * scale;
+      canvas.height = (h + titleH) * scale;
+      const ctx = canvas.getContext("2d");
+      ctx.scale(scale, scale);
+
+      // ── Background ──
+      const bgReal = chartBg === "transparent" ? "#0f172a" : chartBg;
+      ctx.fillStyle = bgReal;
+      ctx.fillRect(0, 0, w, h + titleH);
+
+      // ── Title & subtitle ──
+      const { textColor, subColor } = getChartColors(chartBg === "transparent" ? "#0f172a" : chartBg);
+      ctx.textAlign = "center";
+      ctx.fillStyle = textColor;
+      ctx.font = `bold 15px system-ui, -apple-system, sans-serif`;
+      ctx.fillText(chartTitle, w / 2, 22);
+
+      ctx.fillStyle = subColor;
+      ctx.font = `11px system-ui, -apple-system, sans-serif`;
+      ctx.fillText(`${xLabel} vs ${yLabel}  ·  n = ${activeData.length}`, w / 2, 42);
+
+      // ── Chart image ──
+      ctx.drawImage(img, 0, titleH, w, h);
+
+      URL.revokeObjectURL(url);
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png", 1.0);
+      a.download = `scatter_${datasetLabel.replace(/\s+/g, "_")}.png`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
     };
-    img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
+
+    img.onerror = () => { URL.revokeObjectURL(url); alert("No se pudo exportar el gráfico."); };
+    img.src = url;
   };
 
   // ===================== INTRO =====================
   const renderIntro = () => (
     <div className="space-y-8">
-      {/* Qué son variables cuantitativas */}
       <div className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-3xl p-8">
         <div className="flex items-start gap-4 mb-6">
           <div className="p-3 bg-cyan-500/20 rounded-xl"><LineChart className="w-8 h-8 text-cyan-400" /></div>
@@ -474,7 +533,6 @@ const Lab4_2 = ({ goHome, setView }) => {
         </div>
       </div>
 
-      {/* Tipos de tendencia */}
       <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-8">
         <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2">
           <Activity className="w-6 h-6 text-indigo-400" /> Tipos de Tendencia
@@ -497,7 +555,6 @@ const Lab4_2 = ({ goHome, setView }) => {
         </div>
       </div>
 
-      {/* Correlación de Pearson */}
       <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-8">
         <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2">
           <Sigma className="w-6 h-6 text-purple-400" /> Coeficiente de Correlación de Pearson (r)
@@ -536,7 +593,6 @@ const Lab4_2 = ({ goHome, setView }) => {
         </div>
       </div>
 
-      {/* Regresión Lineal */}
       <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-8">
         <h3 className="text-xl font-black text-white mb-4 flex items-center gap-2">
           <LineChart className="w-6 h-6 text-cyan-400" /> Regresión Lineal Simple
@@ -574,23 +630,31 @@ const Lab4_2 = ({ goHome, setView }) => {
   // ===================== ANÁLISIS =====================
   const renderAnalysis = () => {
     const palette = PALETTES[colorPalette];
-    const isLightBg = chartBg === "#ffffff" || chartBg === "#f5f5f5";
-    const textColor = isLightBg ? "#1e293b" : "#e2e8f0";
+
+    // ── Derive adaptive colors from the chosen background ──
+    const effectiveBg = chartBg === "transparent" ? "#0f172a" : chartBg;
+    const { isLight, textColor, tickColor, gridColor } = getChartColors(effectiveBg);
 
     const CustomDot = (props) => {
       const { cx, cy } = props;
-      return <circle cx={cx} cy={cy} r={5} fill={palette.dot} fillOpacity={0.8} stroke="white" strokeWidth={1} />;
+      return <circle cx={cx} cy={cy} r={5} fill={palette.dot} fillOpacity={0.8} stroke={isLight ? "#fff" : "white"} strokeWidth={1} />;
     };
 
     const CustomTooltip = ({ active, payload }) => {
       if (!active || !payload?.length) return null;
       const { x, y } = payload[0].payload;
       return (
-        <div className="bg-slate-900/95 border border-white/20 rounded-xl p-3 shadow-2xl text-sm">
-          <p className="text-slate-400">{xLabel}: <span className="text-white font-bold">{x}</span></p>
-          <p className="text-slate-400">{yLabel}: <span className="text-white font-bold">{y}</span></p>
+        <div style={{
+          background: "rgba(15,23,42,0.97)",
+          border: "1px solid rgba(255,255,255,0.15)",
+          borderRadius: 12,
+          padding: "10px 14px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)"
+        }}>
+          <p style={{ color: "#94a3b8", fontSize: 12 }}>{xLabel}: <span style={{ color: "#fff", fontWeight: 700 }}>{x}</span></p>
+          <p style={{ color: "#94a3b8", fontSize: 12 }}>{yLabel}: <span style={{ color: "#fff", fontWeight: 700 }}>{y}</span></p>
           {stats && (
-            <p className="text-cyan-400 text-xs mt-1">
+            <p style={{ color: "#22d3ee", fontSize: 11, marginTop: 4 }}>
               Predicción: {(stats.rawA + stats.rawB * x).toFixed(2)}
             </p>
           )}
@@ -638,10 +702,19 @@ const Lab4_2 = ({ goHome, setView }) => {
               </label>
               {uploadedColumns.length >= 2 && (
                 <div className="mt-3 space-y-3">
-                  {[["Variable X (independiente)", selectedXCol, setSelectedXCol], ["Variable Y (dependiente)", selectedYCol, setSelectedYCol]].map(([lbl, val, setter], i) => (
+                  {[
+                    ["Variable X (independiente)", selectedXCol, setSelectedXCol],
+                    ["Variable Y (dependiente)", selectedYCol, setSelectedYCol]
+                  ].map(([lbl, val, setter], i) => (
                     <div key={i}>
                       <label className="block text-xs font-bold text-slate-400 uppercase mb-1">{lbl}</label>
-                      <select value={val} onChange={e => { setter(e.target.value); const xc = i === 0 ? e.target.value : selectedXCol; const yc = i === 1 ? e.target.value : selectedYCol; buildFromCols(rawUploadedData, xc, yc); }}
+                      <select value={val}
+                        onChange={e => {
+                          setter(e.target.value);
+                          const xc = i === 0 ? e.target.value : selectedXCol;
+                          const yc = i === 1 ? e.target.value : selectedYCol;
+                          buildFromCols(rawUploadedData, xc, yc);
+                        }}
                         className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white">
                         {uploadedColumns.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
@@ -683,15 +756,24 @@ const Lab4_2 = ({ goHome, setView }) => {
                   <div className="mt-2 h-5 rounded-lg" style={{ background: `linear-gradient(90deg, ${PALETTES[colorPalette].dot}, ${PALETTES[colorPalette].line})` }} />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-slate-400 uppercase block mb-1">Fondo del gráfico</label>
-                  <select value={chartBg} onChange={e => { setChartBg(e.target.value); setChartKey(p => p + 1); }}
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 text-sm font-bold text-white">
-                    <option value="transparent">Transparente</option>
-                    <option value="#ffffff">Blanco</option>
-                    <option value="#f5f5f5">Gris Claro</option>
-                    <option value="#1e293b">Pizarra</option>
-                    <option value="#000000">Negro</option>
-                  </select>
+                  <label className="text-xs font-bold text-slate-400 uppercase block mb-2">Fondo del gráfico</label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {[
+                      { key: "transparent", label: "Auto", preview: "repeating-conic-gradient(#334155 0% 25%, #1e293b 0% 50%) 0 0 / 10px 10px" },
+                      { key: "#1e293b", label: "Pizarra", preview: "#1e293b" },
+                      { key: "#000000", label: "Negro", preview: "#000000" },
+                      { key: "#f5f5f5", label: "Gris", preview: "#f5f5f5" },
+                      { key: "#ffffff", label: "Blanco", preview: "#ffffff" },
+                    ].map(opt => (
+                      <button key={opt.key} onClick={() => { setChartBg(opt.key); setChartKey(p => p + 1); }}
+                        title={opt.label}
+                        className={`h-9 rounded-lg border-2 flex items-center justify-center text-[9px] font-black transition-all
+                          ${chartBg === opt.key ? "border-cyan-400 scale-110 ring-1 ring-cyan-500/50" : "border-slate-600 opacity-70 hover:opacity-100"}`}
+                        style={{ background: opt.preview, color: opt.key === "#ffffff" || opt.key === "#f5f5f5" ? "#334155" : "#e2e8f0" }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl">
                   <span className="text-sm font-bold text-white">Mostrar regresión</span>
@@ -713,7 +795,7 @@ const Lab4_2 = ({ goHome, setView }) => {
               <p className="text-xs text-slate-400 mb-3">y = {stats.a} + {stats.b}·x</p>
               <div className="flex gap-2">
                 <input type="number" value={predictionX} onChange={e => setPredictionX(e.target.value)}
-                  placeholder={`Valor de x`}
+                  placeholder="Valor de x"
                   className="flex-1 px-3 py-2 bg-slate-900/50 border border-slate-600 rounded-lg text-sm font-bold text-white" />
                 <button onClick={handlePredict}
                   className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg font-bold text-white text-sm transition-all">
@@ -741,7 +823,7 @@ const Lab4_2 = ({ goHome, setView }) => {
               {activeData.length > 0 && (
                 <button onClick={exportChart}
                   className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 rounded-lg font-bold text-sm flex items-center gap-2 transition-all">
-                  <Download className="w-4 h-4" /> Exportar
+                  <Download className="w-4 h-4" /> Exportar PNG
                 </button>
               )}
             </div>
@@ -754,25 +836,28 @@ const Lab4_2 = ({ goHome, setView }) => {
                 </div>
               </div>
             ) : (
-              <div ref={chartRef} key={chartKey} style={{ backgroundColor: chartBg }} className="rounded-xl p-4">
-                <h4 className="text-center text-sm font-bold mb-1" style={{ color: textColor }}>{chartTitle}</h4>
-                <p className="text-center text-xs text-slate-500 mb-4">{xLabel} vs {yLabel} | n = {activeData.length}</p>
-                <ResponsiveContainer width="100%" height={420}>
+              <div ref={chartRef} key={chartKey}
+                style={{ backgroundColor: chartBg === "transparent" ? "transparent" : chartBg }}
+                className="rounded-xl p-4">
+                {/* ── Título visible en pantalla (también se captura en el SVG area) ── */}
+                <h4 className="text-center text-sm font-bold mb-0.5" style={{ color: textColor }}>{chartTitle}</h4>
+                <p className="text-center text-xs mb-3" style={{ color: tickColor }}>{xLabel} vs {yLabel} · n = {activeData.length}</p>
+
+                <ResponsiveContainer width="100%" height={400}>
                   <ComposedChart margin={{ top: 20, right: 30, bottom: 60, left: 60 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.1)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                     <XAxis dataKey="x" type="number" name={xLabel} domain={["auto", "auto"]}
-                      tick={{ fill: textColor, fontSize: 11 }}
-                      label={{ value: xLabel, position: "insideBottom", offset: -15, style: { fill: textColor, fontWeight: 700, fontSize: 11 } }} />
-                    <YAxis dataKey="y" type="number" name={yLabel} domain={["auto", "auto"]}
-                      tick={{ fill: textColor, fontSize: 11 }}
+                      tick={{ fill: tickColor, fontSize: 11 }}
                       label={{
-                        value: yLabel,
-                        angle: -90,
-                        position: "insideLeft",
-                        offset: 20,
+                        value: xLabel, position: "insideBottom", offset: -15,
+                        style: { fill: textColor, fontWeight: 700, fontSize: 11 }
+                      }} />
+                    <YAxis dataKey="y" type="number" name={yLabel} domain={["auto", "auto"]}
+                      tick={{ fill: tickColor, fontSize: 11 }}
+                      label={{
+                        value: yLabel, angle: -90, position: "insideLeft", offset: 20,
                         style: { fill: textColor, fontWeight: 700, fontSize: 11, textAnchor: "middle" }
-                      }}
-                    />
+                      }} />
                     <Tooltip content={<CustomTooltip />} />
                     <Scatter data={activeData} shape={<CustomDot />} />
                     {showRegression && regressionLine.length === 2 && (
@@ -783,7 +868,6 @@ const Lab4_2 = ({ goHome, setView }) => {
                         stroke={palette.line}
                         strokeWidth={2.5}
                         dot={false}
-                        strokeDasharray="0"
                       />
                     )}
                   </ComposedChart>
@@ -794,12 +878,11 @@ const Lab4_2 = ({ goHome, setView }) => {
             {/* Resultados estadísticos */}
             {stats && (
               <div className="mt-6 space-y-4">
-                {/* Métricas clave */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
                     { label: "Correlación (r)", value: stats.r, color: "text-cyan-400", sub: stats.strengthInfo.label },
                     { label: "R² (coef. det.)", value: stats.r2, color: "text-purple-400", sub: `${(parseFloat(stats.r2) * 100).toFixed(1)}% varianza explicada` },
-                    { label: "Intercepto (a)", value: stats.a, color: "text-pink-400", sub: `y cuando x = 0` },
+                    { label: "Intercepto (a)", value: stats.a, color: "text-pink-400", sub: "y cuando x = 0" },
                     { label: "Pendiente (b)", value: stats.b, color: "text-amber-400", sub: "cambio en y por unidad x" }
                   ].map((m, i) => (
                     <div key={i} className="bg-slate-900/50 rounded-xl p-4 text-center">
@@ -810,21 +893,17 @@ const Lab4_2 = ({ goHome, setView }) => {
                   ))}
                 </div>
 
-                {/* Ecuación */}
                 <div className="p-5 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-2xl">
                   <div className="flex items-start justify-between flex-wrap gap-4">
                     <div>
                       <p className="text-sm text-slate-400 mb-1 font-bold">Ecuación de Regresión:</p>
-                      <p className="text-xl font-black text-white">
-                        ŷ = {stats.a} + ({stats.b})·x
-                      </p>
+                      <p className="text-xl font-black text-white">ŷ = {stats.a} + ({stats.b})·x</p>
                     </div>
                     <div className="px-4 py-2 rounded-xl border bg-cyan-500/10 border-cyan-500/30">
                       <p className="text-xs font-bold text-cyan-400 mb-0.5">{stats.strengthInfo.label}</p>
                       <p className="text-[10px] text-slate-400">n = {stats.n} | r = {stats.r}</p>
                     </div>
                   </div>
-
                   <div className="mt-4 p-3 bg-slate-900/30 rounded-lg">
                     <p className="text-sm text-slate-300 leading-relaxed">
                       <strong className="text-cyan-400">Interpretación: </strong>
@@ -856,16 +935,17 @@ const Lab4_2 = ({ goHome, setView }) => {
           </div>
         </div>
 
-        {/* Selector de modo */}
         <div className="flex gap-3 mb-6">
           {[
             { id: "applied", label: "Práctica Aplicada", icon: Target, bg: "bg-green-500", shadow: "shadow-green-500/30" },
             { id: "quiz", label: "Quiz Teórico", icon: Brain, bg: "bg-indigo-500", shadow: "shadow-indigo-500/30" }
           ].map(mode => (
-            <button key={mode.id} onClick={() => { setPracticeMode(mode.id); setPracticeResults({}); setPracticeAnswers({}); setAppliedFeedback(null); }}
-              className={`flex-1 px-6 py-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${practiceMode === mode.id
-                ? `${mode.bg} text-white shadow-lg ${mode.shadow}`
-                : "bg-slate-800/50 text-slate-300 hover:bg-slate-700 border border-slate-700"}`}>
+            <button key={mode.id}
+              onClick={() => { setPracticeMode(mode.id); setPracticeResults({}); setPracticeAnswers({}); setAppliedFeedback(null); }}
+              className={`flex-1 px-6 py-4 rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2
+                ${practiceMode === mode.id
+                  ? `${mode.bg} text-white shadow-lg ${mode.shadow}`
+                  : "bg-slate-800/50 text-slate-300 hover:bg-slate-700 border border-slate-700"}`}>
               <mode.icon className="w-5 h-5" />{mode.label}
             </button>
           ))}
@@ -896,7 +976,6 @@ const Lab4_2 = ({ goHome, setView }) => {
                   </div>
                 </div>
 
-                {/* Pregunta 1 */}
                 <div className="p-6 bg-slate-900/50 rounded-2xl border border-slate-700">
                   <h4 className="font-bold text-white mb-4">1️⃣ ¿Qué tipo de tendencia muestra el diagrama de dispersión?</h4>
                   <div className="grid grid-cols-3 gap-3">
@@ -906,15 +985,14 @@ const Lab4_2 = ({ goHome, setView }) => {
                       { id: "ninguna", label: "Sin tendencia", icon: Minus }
                     ].map(opt => (
                       <button key={opt.id} onClick={() => setAppliedAnswers(p => ({ ...p, trend: opt.id }))}
-                        className={`p-4 rounded-xl font-bold text-sm transition-all flex flex-col items-center gap-2 ${appliedAnswers.trend === opt.id
-                          ? "bg-cyan-500 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
+                        className={`p-4 rounded-xl font-bold text-sm transition-all flex flex-col items-center gap-2
+                          ${appliedAnswers.trend === opt.id ? "bg-cyan-500 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
                         <opt.icon className="w-5 h-5" />{opt.label}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Pregunta 2 */}
                 <div className="p-6 bg-slate-900/50 rounded-2xl border border-slate-700">
                   <h4 className="font-bold text-white mb-4">2️⃣ ¿Qué fuerza de correlación tiene r = {stats?.r}?</h4>
                   <div className="grid grid-cols-2 gap-3">
@@ -925,15 +1003,14 @@ const Lab4_2 = ({ goHome, setView }) => {
                       { id: "fuerte", label: "Fuerte (|r| ≥ 0.7)" }
                     ].map(opt => (
                       <button key={opt.id} onClick={() => setAppliedAnswers(p => ({ ...p, rStrength: opt.id }))}
-                        className={`px-4 py-3 rounded-lg font-bold text-sm transition-all ${appliedAnswers.rStrength === opt.id
-                          ? "bg-purple-500 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
+                        className={`px-4 py-3 rounded-lg font-bold text-sm transition-all
+                          ${appliedAnswers.rStrength === opt.id ? "bg-purple-500 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
                         {opt.label}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                {/* Pregunta 3 */}
                 <div className="p-6 bg-slate-900/50 rounded-2xl border border-slate-700">
                   <h4 className="font-bold text-white mb-4">3️⃣ ¿El coeficiente r es positivo, negativo o nulo?</h4>
                   <div className="grid grid-cols-3 gap-3">
@@ -943,8 +1020,8 @@ const Lab4_2 = ({ goHome, setView }) => {
                       { id: "nula", label: "Nulo (r ≈ 0)" }
                     ].map(opt => (
                       <button key={opt.id} onClick={() => setAppliedAnswers(p => ({ ...p, rSign: opt.id }))}
-                        className={`px-4 py-3 rounded-lg font-bold text-sm transition-all ${appliedAnswers.rSign === opt.id
-                          ? "bg-amber-500 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
+                        className={`px-4 py-3 rounded-lg font-bold text-sm transition-all
+                          ${appliedAnswers.rSign === opt.id ? "bg-amber-500 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-700"}`}>
                         {opt.label}
                       </button>
                     ))}
@@ -978,7 +1055,8 @@ const Lab4_2 = ({ goHome, setView }) => {
                             { key: "rSign", label: "Signo de r", real: appliedFeedback.details.rSign.real }
                           ].map(item => (
                             <div key={item.key} className={`p-4 rounded-lg ${appliedFeedback.details[item.key].correct
-                              ? "bg-green-500/20 border border-green-500/30" : "bg-red-500/20 border border-red-500/30"}`}>
+                              ? "bg-green-500/20 border border-green-500/30"
+                              : "bg-red-500/20 border border-red-500/30"}`}>
                               <div className="flex items-center gap-2">
                                 {appliedFeedback.details[item.key].correct
                                   ? <CheckCircle className="w-5 h-5 text-green-400" />
@@ -989,7 +1067,6 @@ const Lab4_2 = ({ goHome, setView }) => {
                             </div>
                           ))}
                         </div>
-
                         <div className="mt-4 p-4 bg-slate-900/40 rounded-xl space-y-2">
                           <p className="text-sm font-bold text-white mb-1">Estadísticos del dataset:</p>
                           <div className="grid grid-cols-2 gap-3">
@@ -1006,7 +1083,6 @@ const Lab4_2 = ({ goHome, setView }) => {
                           </div>
                           <p className="text-sm text-slate-300 mt-2">Ecuación: ŷ = <span className="text-amber-400 font-bold">{appliedFeedback.a}</span> + <span className="text-amber-400 font-bold">{appliedFeedback.b}</span>·x</p>
                         </div>
-
                         <button onClick={() => { setAppliedFeedback(null); setAppliedAnswers({ trend: null, rStrength: null, rSign: null }); }}
                           className="mt-4 px-6 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-lg font-bold text-white transition-all">
                           Intentar de Nuevo
@@ -1053,9 +1129,8 @@ const Lab4_2 = ({ goHome, setView }) => {
                     ? result.correct ? "border-green-500/50 bg-green-500/5" : "border-red-500/50 bg-red-500/5"
                     : "border-slate-700 hover:border-slate-600"}`}>
                     <div className="flex items-start gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg shrink-0 ${result
-                        ? result.correct ? "bg-green-500 text-white" : "bg-red-500 text-white"
-                        : "bg-cyan-500 text-white"}`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg shrink-0
+                        ${result ? result.correct ? "bg-green-500 text-white" : "bg-red-500 text-white" : "bg-cyan-500 text-white"}`}>
                         {result ? (result.correct ? "✓" : "✗") : qi + 1}
                       </div>
                       <div className="flex-1">
@@ -1067,14 +1142,16 @@ const Lab4_2 = ({ goHome, setView }) => {
                             const showResult = !!result;
                             return (
                               <button key={idx} onClick={() => !showResult && handlePracticeAnswer(q.id, idx)} disabled={showResult}
-                                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${showResult
-                                  ? isCorrect ? "border-green-500 bg-green-500/10" : isSelected ? "border-red-500 bg-red-500/10" : "border-slate-700 bg-slate-800/30"
-                                  : isSelected ? "border-cyan-500 bg-cyan-500/10" : "border-slate-700 bg-slate-800/50 hover:border-cyan-500/50"
+                                className={`w-full text-left p-4 rounded-lg border-2 transition-all
+                                  ${showResult
+                                    ? isCorrect ? "border-green-500 bg-green-500/10" : isSelected ? "border-red-500 bg-red-500/10" : "border-slate-700 bg-slate-800/30"
+                                    : isSelected ? "border-cyan-500 bg-cyan-500/10" : "border-slate-700 bg-slate-800/50 hover:border-cyan-500/50"
                                   } ${showResult ? "cursor-default" : "cursor-pointer"}`}>
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${showResult
-                                    ? isCorrect ? "bg-green-500 text-white" : isSelected ? "bg-red-500 text-white" : "bg-slate-700 text-slate-400"
-                                    : isSelected ? "bg-cyan-500 text-white" : "bg-slate-700 text-slate-400"}`}>
+                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                                    ${showResult
+                                      ? isCorrect ? "bg-green-500 text-white" : isSelected ? "bg-red-500 text-white" : "bg-slate-700 text-slate-400"
+                                      : isSelected ? "bg-cyan-500 text-white" : "bg-slate-700 text-slate-400"}`}>
                                     {String.fromCharCode(65 + idx)}
                                   </div>
                                   <span className={`text-sm ${showResult && isCorrect ? "text-green-400 font-bold" : "text-slate-300"}`}>{opt}</span>
@@ -1121,14 +1198,12 @@ const Lab4_2 = ({ goHome, setView }) => {
   // ===================== RENDER PRINCIPAL =====================
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      {/* Fondo decorativo */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-cyan-500/8 rounded-full blur-[150px] animate-pulse" />
         <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-blue-500/8 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: "2s" }} />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-indigo-500/8 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: "4s" }} />
       </div>
 
-      {/* Navbar */}
       <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -1154,9 +1229,7 @@ const Lab4_2 = ({ goHome, setView }) => {
         </div>
       </nav>
 
-      {/* Contenido */}
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-8 relative">
-        {/* Header */}
         <section className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 border-l-4 border-l-cyan-500 relative overflow-hidden">
           <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-5 pointer-events-none">
             <div className="w-64 h-64 rounded-3xl border-8 border-cyan-400 flex items-center justify-center">
@@ -1180,7 +1253,6 @@ const Lab4_2 = ({ goHome, setView }) => {
           </div>
         </section>
 
-        {/* Tabs */}
         <div className="flex gap-3 border-b border-white/10 pb-4">
           {[
             { id: "intro", label: "Introducción", icon: Info },
@@ -1188,9 +1260,10 @@ const Lab4_2 = ({ goHome, setView }) => {
             { id: "practice", label: "Práctica", icon: Brain }
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${activeTab === tab.id
-                ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/30"
-                : "bg-white/5 hover:bg-white/10 text-slate-300"}`}>
+              className={`px-6 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2
+                ${activeTab === tab.id
+                  ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/30"
+                  : "bg-white/5 hover:bg-white/10 text-slate-300"}`}>
               <tab.icon className="w-4 h-4" />{tab.label}
             </button>
           ))}
