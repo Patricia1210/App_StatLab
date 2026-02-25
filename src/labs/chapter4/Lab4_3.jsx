@@ -172,9 +172,9 @@ const computeGroupStats = (data, catCol, numCol) => {
 };
 
 // ─────────────────────────────────────────────────────────
-// BOXPLOT SVG (mantiene estética original)
+// BOXPLOT SVG
 // ─────────────────────────────────────────────────────────
-const BoxplotChart = ({ groupStats, numLabel, catLabel, colors }) => {
+const BoxplotChart = ({ groupStats, numLabel, catLabel, colors, isLight = false }) => {
   if (!groupStats?.length) return null;
   const allVals = groupStats.flatMap(g => g.sorted);
   const gMin = Math.min(...allVals), gMax = Math.max(...allVals);
@@ -187,21 +187,26 @@ const BoxplotChart = ({ groupStats, numLabel, catLabel, colors }) => {
   const gW = pW / nG;
   const bW = Math.min(gW * 0.42, 52);
   const ticks = Array.from({ length: 7 }, (_, i) => yMin + (i / 6) * (yMax - yMin));
+  const tickFill = isLight ? "#475569" : "#94a3b8";
+  const axisLabelFill = isLight ? "#1e293b" : "#e2e8f0";
+  const gridStroke = isLight ? "rgba(30,41,59,0.1)" : "rgba(148,163,184,0.1)";
+  const legendFill = isLight ? "#64748b" : "#64748b";
+  const catTextFill = isLight ? "#1e293b" : "#cbd5e1";
 
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
       {ticks.map((t, i) => (
         <line key={i} x1={mL} y1={toY(t)} x2={W - mR} y2={toY(t)}
-          stroke="rgba(148,163,184,0.1)" strokeDasharray="4 3" />
+          stroke={gridStroke} strokeDasharray="4 3" />
       ))}
-      <line x1={mL} y1={mT} x2={mL} y2={mT + pH} stroke="rgba(148,163,184,0.25)" />
+      <line x1={mL} y1={mT} x2={mL} y2={mT + pH} stroke={isLight ? "rgba(30,41,59,0.2)" : "rgba(148,163,184,0.25)"} />
       {ticks.map((t, i) => (
-        <text key={i} x={mL - 8} y={toY(t) + 4} textAnchor="end" fontSize={10} fill="#94a3b8">
+        <text key={i} x={mL - 8} y={toY(t) + 4} textAnchor="end" fontSize={10} fill={tickFill}>
           {t.toFixed(1)}
         </text>
       ))}
       <text transform={`translate(14,${mT + pH / 2}) rotate(-90)`}
-        textAnchor="middle" fontSize={11} fill="#a78bfa" fontWeight="700">{numLabel}</text>
+        textAnchor="middle" fontSize={11} fill={axisLabelFill} fontWeight="700">{numLabel}</text>
 
       {groupStats.map((g, i) => {
         const cx = mL + (i + 0.5) * gW, bx = cx - bW / 2;
@@ -216,26 +221,49 @@ const BoxplotChart = ({ groupStats, numLabel, catLabel, colors }) => {
             <line x1={cx - bW * .3} y1={yWL} x2={cx + bW * .3} y2={yWL} stroke={color} strokeWidth={2} />
             <line x1={cx - bW * .3} y1={yWU} x2={cx + bW * .3} y2={yWU} stroke={color} strokeWidth={2} />
             <rect x={bx} y={yQ3} width={bW} height={Math.abs(yQ1 - yQ3)}
-              fill={color} fillOpacity={.18} stroke={color} strokeWidth={2} rx={4} />
+              fill={color} fillOpacity={isLight ? .25 : .18} stroke={color} strokeWidth={2} rx={4} />
             <line x1={bx} y1={yMed} x2={bx + bW} y2={yMed} stroke={color} strokeWidth={3} />
-            <circle cx={cx} cy={yMean} r={4.5} fill={color} stroke="white" strokeWidth={1.5} />
+            <circle cx={cx} cy={yMean} r={4.5} fill={color} stroke={isLight ? "#ffffff" : "white"} strokeWidth={1.5} />
             {g.outliers.slice(0, 8).map((ov, oi) => (
               <circle key={oi} cx={cx + (oi % 2 === 0 ? -9 : 9)} cy={toY(ov)} r={3.5}
                 fill="none" stroke={color} strokeWidth={1.5} opacity={.75} />
             ))}
-            <text x={cx} y={H - 8} textAnchor="middle" fontSize={11} fill="#cbd5e1" fontWeight="600">
+            <text x={cx} y={H - 8} textAnchor="middle" fontSize={11} fill={catTextFill} fontWeight="600">
               {g.cat.length > 11 ? g.cat.slice(0, 10) + "…" : g.cat}
             </text>
           </g>
         );
       })}
       <circle cx={mL + 6} cy={mT - 12} r={4} fill="#a78bfa" stroke="white" strokeWidth={1.5} />
-      <text x={mL + 14} y={mT - 8} fontSize={9} fill="#64748b">Media</text>
+      <text x={mL + 14} y={mT - 8} fontSize={9} fill={legendFill}>Media</text>
       <line x1={mL + 50} y1={mT - 12} x2={mL + 64} y2={mT - 12} stroke="#a78bfa" strokeWidth={2.5} />
-      <text x={mL + 68} y={mT - 8} fontSize={9} fill="#64748b">Mediana</text>
+      <text x={mL + 68} y={mT - 8} fontSize={9} fill={legendFill}>Mediana</text>
       <circle cx={mL + 120} cy={mT - 12} r={3} fill="none" stroke="#a78bfa" strokeWidth={1.5} />
-      <text x={mL + 128} y={mT - 8} fontSize={9} fill="#64748b">Outlier</text>
+      <text x={mL + 128} y={mT - 8} fontSize={9} fill={legendFill}>Outlier</text>
     </svg>
+  );
+};
+
+// ─────────────────────────────────────────────────────────
+// CUSTOM TOOLTIP — texto siempre visible
+// ─────────────────────────────────────────────────────────
+const CustomBarTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: "rgba(15,23,42,0.97)",
+      border: "1px solid rgba(168,85,247,0.4)",
+      borderRadius: 12,
+      padding: "10px 16px",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.5)"
+    }}>
+      <p style={{ color: "#e2e8f0", fontWeight: 700, marginBottom: 4, fontSize: 13 }}>{label}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: "#c4b5fd", fontSize: 13, fontWeight: 600 }}>
+          Media: <span style={{ color: "#ffffff", fontWeight: 800 }}>{parseFloat(p.value).toFixed(3)}</span>
+        </p>
+      ))}
+    </div>
   );
 };
 
@@ -261,10 +289,10 @@ export default function Lab4_3({ goHome, setView }) {
   const [showValues, setShowValues] = useState(true);
   const [sortBy, setSortBy] = useState("name");
   const [showConfig, setShowConfig] = useState(false);
+  const [chartBg, setChartBg] = useState("dark");
   const [pAnswers, setPAnswers] = useState({});
   const [pResults, setPResults] = useState({});
   const [pScore, setPScore] = useState(0);
-
 
   const colors = PALETTES[palette].colors;
 
@@ -346,34 +374,20 @@ export default function Lab4_3({ goHome, setView }) {
   };
 
   const downloadPNG = (elementId, name) => {
-    // Cambiar a la pestaña correcta si es necesario
     if (elementId === "boxplot-chart") setActiveViz("boxplot");
     else if (elementId === "bars-chart") setActiveViz("bars");
-
-    // Esperar a que React renderice la pestaña antes de capturar
     setTimeout(() => {
       const container = document.getElementById(elementId);
-      if (!container) {
-        alert("El gráfico no está disponible. Asegúrate de estar viendo ese gráfico.");
-        return;
-      }
+      if (!container) { alert("El gráfico no está disponible."); return; }
       const svg = container.querySelector("svg");
-      if (!svg) {
-        alert("No se encontró el SVG. Intenta hacer clic en la pestaña del gráfico primero.");
-        return;
-      }
-
+      if (!svg) { alert("No se encontró el SVG."); return; }
       const bbox = svg.getBoundingClientRect();
       const w = Math.max(bbox.width, 100) || 620;
       const h = Math.max(bbox.height, 100) || 380;
-
-      // Clonar SVG y forzar atributos necesarios
       const clone = svg.cloneNode(true);
       clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
       clone.setAttribute("width", w);
       clone.setAttribute("height", h);
-
-      // Copiar fill/stroke de elementos hijos (Recharts los pone como atributos inline, no CSS)
       const srcEls = svg.querySelectorAll("[fill],[stroke]");
       const clnEls = clone.querySelectorAll("[fill],[stroke]");
       srcEls.forEach((el, i) => {
@@ -382,41 +396,49 @@ export default function Lab4_3({ goHome, setView }) {
         if (el.getAttribute("stroke")) clnEls[i].setAttribute("stroke", el.getAttribute("stroke"));
         if (el.getAttribute("fill-opacity")) clnEls[i].setAttribute("fill-opacity", el.getAttribute("fill-opacity"));
       });
-
       const svgStr = new XMLSerializer().serializeToString(clone);
       const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const img = new Image();
-
       img.onload = () => {
         const scale = 2;
+        // Extra padding at top for title
+        const titleH = 52;
         const canvas = document.createElement("canvas");
-        canvas.width = w * scale;
-        canvas.height = h * scale;
+        canvas.width = w * scale; canvas.height = (h + titleH) * scale;
         const ctx = canvas.getContext("2d");
         ctx.scale(scale, scale);
-        ctx.fillStyle = "#0f172a";
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
+        // Background
+        const bgColor = chartBg === "dark" ? "#0f172a"
+          : chartBg === "slate" ? "#1e293b"
+            : chartBg === "white" ? "#ffffff"
+              : chartBg === "lightgray" ? "#f1f5f9"
+                : "#0f172a";
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, w, h + titleH);
+        // Title
+        const isLight = chartBg === "white" || chartBg === "lightgray";
+        ctx.fillStyle = isLight ? "#1e293b" : "#f1f5f9";
+        ctx.font = `bold ${14 * scale / scale}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(chartTitle, w / 2, 22);
+        // Subtitle
+        ctx.fillStyle = isLight ? "#64748b" : "#94a3b8";
+        ctx.font = `${10 * scale / scale}px system-ui, sans-serif`;
+        ctx.fillText(`${dsLabel} · ${rawData.length} filas · ${groupStats.length} grupos`, w / 2, 40);
+        // Chart
+        ctx.drawImage(img, 0, titleH, w, h);
         URL.revokeObjectURL(url);
         const a = document.createElement("a");
         a.href = canvas.toDataURL("image/png", 1.0);
         a.download = `${name}_${dsLabel}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
       };
-
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        alert("No se pudo exportar el gráfico. Intenta hacer clic en la pestaña primero y luego descargar.");
-      };
-
+      img.onerror = () => { URL.revokeObjectURL(url); alert("No se pudo exportar el gráfico."); };
       img.src = url;
     }, 150);
   };
 
-  // ── quiz ──
   const answerQ = (id, idx) => setPAnswers(p => ({ ...p, [id]: idx }));
   const checkQuiz = () => {
     const res = {}; let ok = 0;
@@ -430,8 +452,6 @@ export default function Lab4_3({ goHome, setView }) {
   // ════════════════════════════════════════════════════════
   const renderIntro = () => (
     <div className="space-y-8">
-
-      {/* ── Hero asimétrico ── */}
       <div className="relative overflow-hidden rounded-3xl border border-violet-500/20
                       bg-gradient-to-br from-slate-900 via-violet-950/25 to-slate-900 p-10">
         <div className="absolute inset-0 pointer-events-none">
@@ -486,7 +506,6 @@ export default function Lab4_3({ goHome, setView }) {
         </div>
       </div>
 
-      {/* ── Tres herramientas ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {[
           {
@@ -527,7 +546,6 @@ export default function Lab4_3({ goHome, setView }) {
         ))}
       </div>
 
-      {/* ── Anatomía del Boxplot ── */}
       <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-8">
         <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2">
           <BookOpen className="w-6 h-6 text-purple-400" /> Anatomía del Boxplot
@@ -538,33 +556,23 @@ export default function Lab4_3({ goHome, setView }) {
               {[40, 80, 120, 160].map(y => (
                 <line key={y} x1="40" y1={y} x2="240" y2={y} stroke="rgba(148,163,184,0.08)" strokeDasharray="3 2" />
               ))}
-              {/* Eje Y */}
               <line x1="50" y1="25" x2="50" y2="190" stroke="rgba(148,163,184,0.2)" />
-              {/* Bigote inferior */}
               <line x1="140" y1="162" x2="140" y2="132" stroke="#a855f7" strokeWidth="2" strokeDasharray="4 2" />
               <line x1="118" y1="162" x2="162" y2="162" stroke="#a855f7" strokeWidth="2" />
-              {/* Caja IQR */}
               <rect x="100" y="82" width="80" height="50" fill="#a855f7" fillOpacity=".18" stroke="#a855f7" strokeWidth="2" rx="4" />
-              {/* Mediana */}
               <line x1="100" y1="110" x2="180" y2="110" stroke="#a855f7" strokeWidth="3" />
-              {/* Media */}
               <circle cx="140" cy="101" r="5" fill="#a855f7" stroke="white" strokeWidth="1.5" />
-              {/* Bigote superior */}
               <line x1="140" y1="82" x2="140" y2="52" stroke="#a855f7" strokeWidth="2" strokeDasharray="4 2" />
               <line x1="118" y1="52" x2="162" y2="52" stroke="#a855f7" strokeWidth="2" />
-              {/* Outlier */}
               <circle cx="140" cy="30" r="5" fill="none" stroke="#f97316" strokeWidth="2" />
-              {/* Labels derecha */}
               <text x="188" y="33" fontSize="9" fill="#f97316" fontWeight="700">Outlier</text>
               <text x="188" y="55" fontSize="9" fill="#94a3b8">Bigote (máx típico)</text>
               <text x="188" y="85" fontSize="9" fill="#94a3b8">Q3 (75%)</text>
               <text x="188" y="113" fontSize="9" fill="#a855f7" fontWeight="700">Mediana</text>
               <text x="188" y="134" fontSize="9" fill="#94a3b8">Q1 (25%)</text>
               <text x="188" y="165" fontSize="9" fill="#94a3b8">Bigote (mín típico)</text>
-              {/* IQR brace */}
               <text x="56" y="98" fontSize="9" fill="#c084fc">IQR</text>
               <text x="56" y="108" fontSize="9" fill="#c084fc">(caja)</text>
-              {/* Media label */}
               <text x="188" y="104" fontSize="9" fill="#c084fc">● Media</text>
             </svg>
           </div>
@@ -585,7 +593,6 @@ export default function Lab4_3({ goHome, setView }) {
         </div>
       </div>
 
-      {/* ── Coeficiente de Variación ── */}
       <div className="bg-gradient-to-br from-fuchsia-500/10 to-violet-500/10 border border-fuchsia-500/20 rounded-3xl p-8">
         <h3 className="text-xl font-black text-white mb-6 flex items-center gap-2">
           <Percent className="w-6 h-6 text-fuchsia-400" /> Coeficiente de Variación (CV)
@@ -632,6 +639,18 @@ export default function Lab4_3({ goHome, setView }) {
     const ds = selectedDS ? PRESET_DATASETS[selectedDS] : null;
     const hasData = !loading && !error && rawData.length > 0 && groupStats.length > 0;
 
+    // ── Color helpers based on background ──
+    const isLight = chartBg === "white" || chartBg === "lightgray";
+    const tickColor = isLight ? "#1e293b" : "#e2e8f0";
+    const axisLabelColor = isLight ? "#1e293b" : "#e2e8f0";
+    const gridColor = isLight ? "rgba(30,41,59,0.12)" : "rgba(148,163,184,0.08)";
+    const valLabelColor = isLight ? "#1e293b" : "#e2e8f0";
+    const bgStyle = chartBg === "dark" ? "#0f172a"
+      : chartBg === "slate" ? "#1e293b"
+        : chartBg === "white" ? "#ffffff"
+          : chartBg === "lightgray" ? "#f1f5f9"
+            : "transparent";
+
     const BarsChart = () => {
       if (!groupStats.length) return null;
       const data = groupStats.map((g, i) => ({
@@ -641,28 +660,25 @@ export default function Lab4_3({ goHome, setView }) {
         color: colors[i % colors.length]
       }));
       const ValLabel = ({ x, y, width, value }) => !showValues ? null : (
-        <text x={x + width / 2} y={y - 7} textAnchor="middle" fontSize={11} fill="#e2e8f0" fontWeight="700">
+        <text x={x + width / 2} y={y - 7} textAnchor="middle" fontSize={11} fill={valLabelColor} fontWeight="700">
           {parseFloat(value).toFixed(1)}
         </text>
       );
       return (
         <ResponsiveContainer width="100%" height={340}>
           <BarChart data={data} margin={{ top: 30, right: 30, bottom: 50, left: 65 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
-            <XAxis dataKey="cat" tick={{ fill: "#e2e8f0", fontSize: 11 }}
-              label={{ value: catLabel, position: "insideBottom", offset: -15, style: { fill: "#e2e8f0", fontWeight: 700, fontSize: 11 } }} />
-            <YAxis tick={{ fill: "#e2e8f0", fontSize: 11 }}
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+            <XAxis dataKey="cat" tick={{ fill: tickColor, fontSize: 11 }}
+              label={{ value: catLabel, position: "insideBottom", offset: -15, style: { fill: axisLabelColor, fontWeight: 700, fontSize: 11 } }} />
+            <YAxis tick={{ fill: tickColor, fontSize: 11 }}
               label={{
                 value: numLabel, angle: -90, position: "insideLeft", offset: 20,
-                style: { fill: "#a78bfa", fontWeight: 700, fontSize: 11, textAnchor: "middle" }
+                style: { fill: axisLabelColor, fontWeight: 700, fontSize: 11, textAnchor: "middle" }
               }} />
-            <Tooltip
-              contentStyle={{ background: "#0f172a", border: "1px solid rgba(168,85,247,0.3)", borderRadius: 12, padding: "8px 14px" }}
-              labelStyle={{ color: "#e2e8f0", fontWeight: 700 }}
-              formatter={(v, n) => [parseFloat(v).toFixed(3), n === "mean" ? "Media" : "IC ±95%"]} />
+            <Tooltip content={<CustomBarTooltip />} cursor={{ fill: isLight ? "rgba(168,85,247,0.06)" : "rgba(168,85,247,0.08)" }} />
             <Bar dataKey="mean" radius={[8, 8, 0, 0]}>
               {data.map((d, i) => <Cell key={i} fill={d.color} fillOpacity={0.85} />)}
-              <ErrorBar dataKey="error" width={8} strokeWidth={2.5} stroke="#ffffff" opacity={0.55} />
+              <ErrorBar dataKey="error" width={8} strokeWidth={2.5} stroke={isLight ? "#1e293b" : "#ffffff"} opacity={0.55} />
               <LabelList content={<ValLabel />} />
             </Bar>
           </BarChart>
@@ -675,8 +691,6 @@ export default function Lab4_3({ goHome, setView }) {
 
         {/* ── PANEL IZQUIERDO ── */}
         <div className="lg:col-span-4 space-y-4">
-
-          {/* Datasets */}
           <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-6">
             <h3 className="text-base font-black text-white mb-4 flex items-center gap-2">
               <Database className="w-4 h-4 text-violet-400" /> Datasets
@@ -707,7 +721,6 @@ export default function Lab4_3({ goHome, setView }) {
             </div>
           </div>
 
-          {/* Variables dinámicas */}
           {rawData.length > 0 && (
             <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-6">
               <h3 className="text-base font-black text-white mb-4 flex items-center gap-2">
@@ -750,7 +763,6 @@ export default function Lab4_3({ goHome, setView }) {
             </div>
           )}
 
-          {/* Configuración */}
           {hasData && (
             <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-6">
               <button onClick={() => setShowConfig(p => !p)}
@@ -787,6 +799,25 @@ export default function Lab4_3({ goHome, setView }) {
                       <option value="mean_asc">Media ↑ (menor primero)</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase block mb-1.5">Fondo del gráfico</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[
+                        { key: "dark", label: "Oscuro", bg: "#0f172a", border: "#334155", text: "#94a3b8" },
+                        { key: "slate", label: "Pizarra", bg: "#1e293b", border: "#475569", text: "#94a3b8" },
+                        { key: "transparent", label: "Trans.", bg: "transparent", border: "#334155", text: "#94a3b8" },
+                        { key: "lightgray", label: "Gris", bg: "#f1f5f9", border: "#cbd5e1", text: "#475569" },
+                        { key: "white", label: "Blanco", bg: "#ffffff", border: "#e2e8f0", text: "#475569" },
+                      ].map(opt => (
+                        <button key={opt.key} onClick={() => setChartBg(opt.key)} title={opt.label}
+                          className={`h-9 rounded-lg border-2 flex items-center justify-center transition-all text-[9px] font-black
+                            ${chartBg === opt.key ? "border-violet-400 scale-110 ring-1 ring-violet-500/50" : "border-slate-600 opacity-70 hover:opacity-100"}`}
+                          style={{ background: opt.bg === "transparent" ? "repeating-conic-gradient(#334155 0% 25%, #1e293b 0% 50%) 0 0 / 10px 10px" : opt.bg, color: opt.text }}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl">
                     <span className="text-sm font-bold text-white">Valores sobre barras</span>
                     <button onClick={() => setShowValues(p => !p)}
@@ -799,7 +830,6 @@ export default function Lab4_3({ goHome, setView }) {
             </div>
           )}
 
-          {/* Descargas */}
           {hasData && (
             <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-6">
               <h3 className="text-base font-black text-white mb-3 flex items-center gap-2">
@@ -828,7 +858,6 @@ export default function Lab4_3({ goHome, setView }) {
 
         {/* ── PANEL DERECHO ── */}
         <div className="lg:col-span-8 space-y-5">
-
           {loading && (
             <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-20 flex items-center justify-center">
               <div className="text-center">
@@ -855,7 +884,6 @@ export default function Lab4_3({ goHome, setView }) {
 
           {hasData && (
             <>
-              {/* Tabs de visualización */}
               <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-6">
                 <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
                   <div>
@@ -929,11 +957,12 @@ export default function Lab4_3({ goHome, setView }) {
 
                 {/* ─── BOXPLOT ─── */}
                 {activeViz === "boxplot" && (
-                  <div id="boxplot-chart">
-                    <BoxplotChart groupStats={groupStats} numLabel={numLabel} catLabel={catLabel} colors={colors} />
-                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  <div id="boxplot-chart" style={{ background: bgStyle, borderRadius: 12, padding: bgStyle !== "transparent" ? "12px 8px 8px" : 0 }}>
+                    <BoxplotChart groupStats={groupStats} numLabel={numLabel} catLabel={catLabel} colors={colors} isLight={isLight} />
+                    {/* ── tarjetas centradas ── */}
+                    <div className="mt-4 flex flex-wrap justify-center gap-3">
                       {groupStats.map((g, i) => (
-                        <div key={g.cat} className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                        <div key={g.cat} className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50 w-36">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colors[i % colors.length] }} />
                             <span className="text-xs font-black text-white truncate">{g.cat}</span>
@@ -957,10 +986,13 @@ export default function Lab4_3({ goHome, setView }) {
                 {/* ─── BARRAS ─── */}
                 {activeViz === "bars" && (
                   <div id="bars-chart">
-                    <BarsChart />
-                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    <div style={{ background: bgStyle, borderRadius: 12, padding: bgStyle !== "transparent" ? "12px 8px 8px" : 0 }}>
+                      <BarsChart />
+                    </div>
+                    {/* ── tarjetas centradas ── */}
+                    <div className="mt-4 flex flex-wrap justify-center gap-3">
                       {groupStats.map((g, i) => (
-                        <div key={g.cat} className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                        <div key={g.cat} className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50 w-36">
                           <div className="flex items-center gap-2 mb-2">
                             <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colors[i % colors.length] }} />
                             <span className="text-xs font-black text-white truncate">{g.cat}</span>
@@ -1024,7 +1056,6 @@ export default function Lab4_3({ goHome, setView }) {
                       );
                     })}
 
-                    {/* Diferencia entre extremos */}
                     {groupStats.length >= 2 && (() => {
                       const s = [...groupStats].sort((a, b) => b.mean - a.mean);
                       const top = s[0], bot = s[s.length - 1];
@@ -1055,7 +1086,7 @@ export default function Lab4_3({ goHome, setView }) {
                 )}
               </div>
 
-              {/* Interpretación automática descriptiva */}
+              {/* Interpretación automática */}
               <div className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 border border-violet-500/20 rounded-3xl p-6">
                 <h4 className="font-black text-white mb-4 flex items-center gap-2">
                   <Layers className="w-5 h-5 text-violet-400" /> Interpretación Descriptiva Automática
@@ -1127,7 +1158,6 @@ export default function Lab4_3({ goHome, setView }) {
       <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-violet-950/20 to-slate-900 border border-violet-500/20 rounded-3xl p-8">
         <div className="absolute top-0 right-0 w-72 h-72 bg-violet-500/10 rounded-full blur-[90px] pointer-events-none" />
         <div className="relative z-10">
-          {/* Encabezado */}
           <div className="flex items-start gap-4 mb-8">
             <div className="p-3 bg-violet-500/20 rounded-xl border border-violet-500/30 shrink-0">
               <Brain className="w-8 h-8 text-violet-400" />
@@ -1140,7 +1170,6 @@ export default function Lab4_3({ goHome, setView }) {
             </div>
           </div>
 
-          {/* Resultado */}
           {Object.keys(pResults).length > 0 && (
             <div className="mb-6 p-5 bg-slate-900/60 rounded-2xl border border-violet-500/30">
               <div className="flex items-center justify-between flex-wrap gap-4">
@@ -1163,7 +1192,6 @@ export default function Lab4_3({ goHome, setView }) {
             </div>
           )}
 
-          {/* Preguntas */}
           <div className="space-y-4">
             {QUIZ.map((q, qi) => {
               const result = pResults[q.id];
@@ -1216,7 +1244,6 @@ export default function Lab4_3({ goHome, setView }) {
             })}
           </div>
 
-          {/* Botones acción */}
           {Object.keys(pAnswers).length === QUIZ.length && Object.keys(pResults).length === 0 && (
             <div className="mt-6 flex justify-center">
               <button onClick={checkQuiz}
@@ -1246,14 +1273,12 @@ export default function Lab4_3({ goHome, setView }) {
   // ════════════════════════════════════════════════════════
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      {/* Fondo */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-40 -right-40 w-96 h-96 bg-violet-500/8 rounded-full blur-[150px] animate-pulse" />
         <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-purple-500/8 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: "2s" }} />
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-fuchsia-500/8 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: "4s" }} />
       </div>
 
-      {/* Navbar */}
       <nav className="border-b border-white/10 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50 shadow-2xl">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -1282,7 +1307,6 @@ export default function Lab4_3({ goHome, setView }) {
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-8 relative">
-        {/* Header */}
         <section className="bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8
                             border-l-4 border-l-violet-500 relative overflow-hidden">
           <div className="absolute right-8 top-1/2 -translate-y-1/2 opacity-[0.04] pointer-events-none">
@@ -1309,7 +1333,6 @@ export default function Lab4_3({ goHome, setView }) {
           </div>
         </section>
 
-        {/* Tabs */}
         <div className="flex gap-2 border-b border-white/10 pb-4">
           {[
             { id: "intro", label: "Introducción", Icon: Info },
