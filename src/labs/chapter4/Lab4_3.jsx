@@ -526,24 +526,30 @@ export default function Lab4_3({ goHome, setView }) {
             desc: "Compara promedios entre grupos con barras de error que representan el IC 95% de cada media.",
             items: ["x̄  Altura de barra", "IC 95%  Barras de error", "Ranking por media", "Diferencia descriptiva"]
           },
-        ].map((t, i) => (
-          <div key={i} className={`relative bg-slate-900/60 border border-${t.color}-500/20
-                                   border-l-4 border-l-${t.color}-500 rounded-2xl p-6
-                                   hover:bg-slate-900/80 transition-all`}>
-            <div className="absolute top-4 right-4 text-5xl font-black text-white/[0.04] select-none">{t.num}</div>
-            <t.Icon className={`w-7 h-7 text-${t.color}-400 mb-4`} />
-            <h3 className="font-black text-white mb-2">{t.title}</h3>
-            <p className="text-xs text-slate-400 leading-relaxed mb-4">{t.desc}</p>
-            <div className="space-y-1.5">
-              {t.items.map((m, j) => (
-                <div key={j} className="flex items-center gap-2">
-                  <div className={`w-1.5 h-1.5 rounded-full bg-${t.color}-500 shrink-0`} />
-                  <span className="text-xs text-slate-300 font-mono">{m}</span>
-                </div>
-              ))}
+        ].map((t, i) => {
+          const borderMap = { violet: "border-l-violet-500", purple: "border-l-purple-500", fuchsia: "border-l-fuchsia-500" };
+          const iconMap = { violet: "text-violet-400", purple: "text-purple-400", fuchsia: "text-fuchsia-400" };
+          const dotMap = { violet: "bg-violet-500", purple: "bg-purple-500", fuchsia: "bg-fuchsia-500" };
+          const glowMap = { violet: "hover:shadow-violet-500/20", purple: "hover:shadow-purple-500/20", fuchsia: "hover:shadow-fuchsia-500/20" };
+          return (
+            <div key={i} className={`relative bg-slate-900/60 border border-white/10
+                                   border-l-4 ${borderMap[t.color]} rounded-2xl p-6 cursor-default
+                                   hover:bg-slate-800/70 hover:-translate-y-1 hover:shadow-xl ${glowMap[t.color]}
+                                   transition-all duration-300`}>
+              <t.Icon className={`w-7 h-7 ${iconMap[t.color]} mb-4`} />
+              <h3 className="font-black text-white mb-2">{t.title}</h3>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">{t.desc}</p>
+              <div className="space-y-1.5">
+                {t.items.map((m, j) => (
+                  <div key={j} className="flex items-center gap-2">
+                    <div className={`w-1.5 h-1.5 rounded-full bg-${t.color}-500 shrink-0`} />
+                    <span className="text-xs text-slate-300 font-mono">{m}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-8">
