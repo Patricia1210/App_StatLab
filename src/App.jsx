@@ -806,6 +806,20 @@ const App = () => {
         />
       );
     }
+    // ✅ Lab 5.2 - Distribuciones de Probabilidad
+    if (normalizedSection === "5.2" || normalizedSection === "lab-5-2" || normalizedSection === "5-2") {
+      return (
+        <LabRenderer
+          labKey="chapter5/Lab5_2"
+          goHome={goHome}
+          goToSection={goToSection}
+          setView={setView}
+          setSelectedSection={setSelectedSection}
+          selectedSection={normalizedSection}
+          activeSectionData={activeSectionData}
+        />
+      );
+    }
     // ==================== FALLBACK ====================
     // Cualquier otra sección no conectada
     return (
