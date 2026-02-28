@@ -82,14 +82,28 @@ const Lab52Logo = ({ size = 48 }) => (
 );
 
 // ──────────────────────────────────────────
-// FUNCIONES MATEMÁTICAS
+// FUNCIONES MATEMÁTICAS (numéricamente estables)
 // ──────────────────────────────────────────
-const factorial = n => { if (n <= 1) return 1; let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; };
-const comb = (n, k) => { if (k < 0 || k > n) return 0; if (k === 0 || k === n) return 1; let r = 1; for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1); return Math.round(r); };
+// Log-factorial para evitar overflow en k > 20
+const logFactorial = n => { if (n <= 1) return 0; let s = 0; for (let i = 2; i <= n; i++) s += Math.log(i); return s; };
+const factorial = n => Math.exp(logFactorial(n));
 
-const binomPMF = (n, p, k) => comb(n, k) * Math.pow(p, k) * Math.pow(1 - p, n - k);
-const poissonPMF = (lambda, k) => (Math.exp(-lambda) * Math.pow(lambda, k)) / factorial(Math.min(k, 20));
-const hyperPMF = (N, K, n, k) => (comb(K, k) * comb(N - K, n - k)) / comb(N, n);
+// Combinaciones en log-espacio — sin Math.round, sin overflow
+const logComb = (n, k) => { if (k < 0 || k > n) return -Infinity; return logFactorial(n) - logFactorial(k) - logFactorial(n - k); };
+const comb = (n, k) => k < 0 || k > n ? 0 : Math.exp(logComb(n, k));
+
+// Poisson estable via log-espacio (funciona para cualquier k, cualquier λ)
+const poissonPMF = (lambda, k) => lambda <= 0 ? (k === 0 ? 1 : 0) : Math.exp(-lambda + k * Math.log(lambda) - logFactorial(k));
+const binomPMF = (n, p, k) => {
+  if (p === 0) return k === 0 ? 1 : 0;
+  if (p === 1) return k === n ? 1 : 0;
+  return Math.exp(logComb(n, k) + k * Math.log(p) + (n - k) * Math.log(1 - p));
+};
+// Hipergeométrica en log-espacio — sin redondeo intermedio
+const hyperPMF = (N, K, n, k) => {
+  const logP = logComb(K, k) + logComb(N - K, n - k) - logComb(N, n);
+  return isFinite(logP) ? Math.exp(logP) : 0;
+};
 const normalPDF = (mu, sigma, x) => (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((x - mu) / sigma) ** 2);
 const erf = (x) => {
   const t = 1 / (1 + 0.3275911 * Math.abs(x));
@@ -239,7 +253,7 @@ const TabIntro = () => {
       when: "Variables continuas con distribución simétrica",
       params: ["μ = media", "σ = desviación estándar"],
       EX: "E(X) = μ", Var: "Var(X) = σ²",
-      ejemplos: ["Alturas, pesos, temperaturas", "Errores de medición", "Calificaciones de examen nacional"],
+      ejemplos: ["Alturas, pesos, temperaturas", "Errores de medición", "Calificaciones de exámenes"],
       requisitos: ["Variable continua", "Distribución simétrica tipo campana", "Media = mediana = moda", "Aprox. Binomial con n grande"],
       tag: "CONTINUA"
     },
@@ -463,6 +477,7 @@ const TabIntro = () => {
                 ["Reemplazo", "Con reemplazo", "No aplica", "Sin reemplazo", "No aplica"],
                 ["E(X)", "n·p", "λ", "n·K/N", "μ"],
                 ["Var(X)", "n·p·q", "λ", "n·K/N·(1-K/N)·factor", "σ²"],
+                ["σ(X)", "√(n·p·q)", "√λ", "√(Var(X))", "σ"],
                 ["Casos de uso", "Exámenes, defectos", "Colas, llamadas", "Auditoría, lotes", "Alturas, errores"],
               ].map((row, ri) => (
                 <tr key={ri}>
@@ -489,61 +504,177 @@ const TabIntro = () => {
 };
 
 // ══════════════════════════════════════════
-// CALCULADORA INTERACTIVA — 4 distribuciones
+// CASOS APLICADOS — ESCENARIOS REALES
+// ══════════════════════════════════════════
+const CASOS = [
+  {
+    id: "fabrica", dist: "binom", color: T.binom, emoji: "🏭",
+    titulo: "Control de Calidad — Fábrica de Bombillas",
+    contexto: "Una fábrica produce bombillas con tasa de defectos p = 5%. Se inspeccionan n = 20 bombillas al azar. Sea X = número de bombillas defectuosas.",
+    modelo: "X ~ Binomial(n=20, p=0.05)",
+    params: { n: 20, p: 0.05 },
+    preguntas: [
+      { text: "¿Cuál es P(X = 0)? — Ninguna defectuosa", opts: ["0.3585", "0.3774", "0.2641", "0.1887"], correct: 0, exp: "P(X=0) = (0.95)²⁰ = 0.3585 = 35.85%. Más de 1/3 de las veces el lote sale perfecto." },
+      { text: "¿Cuál es P(X = 1)? — Exactamente 1 defectuosa", opts: ["0.3585", "0.3774", "0.1887", "0.0596"], correct: 1, exp: "P(X=1) = C(20,1)·0.05¹·0.95¹⁹ = 20×0.05×0.3585 = 0.3774 = 37.74%." },
+      { text: "¿Cuál es P(X ≥ 2)? — Al menos 2 defectuosas", opts: ["0.2641", "0.3585", "0.7359", "0.1887"], correct: 0, exp: "P(X≥2) = 1 - P(X=0) - P(X=1) = 1 - 0.3585 - 0.3774 = 0.2641 = 26.41%." },
+      { text: "¿Cuál es P(X ≤ 2)? — A lo más 2 defectuosas", opts: ["0.9245", "0.7359", "0.6415", "0.5236"], correct: 0, exp: "P(X≤2) = P(0)+P(1)+P(2) = 0.3585+0.3774+0.1887 = 0.9245 = 92.45%. El 92% de los lotes tiene 2 o menos defectos." },
+      { text: "¿Cuál es P(1 ≤ X ≤ 3)? — Entre 1 y 3 defectuosas", opts: ["0.5922", "0.7359", "0.4337", "0.6415"], correct: 0, exp: "P(1≤X≤3) = P(1)+P(2)+P(3) = 0.3774+0.1887+0.0596 = 0.5922 = 59.22%. El rango más frecuente de defectos." },
+    ]
+  },
+  {
+    id: "banco", dist: "poisson", color: T.poisson, emoji: "🏦",
+    titulo: "Flujo de Clientes — Sucursal Bancaria",
+    contexto: "En una sucursal bancaria llegan en promedio λ = 6 clientes por hora. Las llegadas son independientes. Sea X = clientes en la próxima hora.",
+    modelo: "X ~ Poisson(λ=6)",
+    params: { lambda: 6 },
+    preguntas: [
+      { text: "¿Cuál es P(X = 4)? — Exactamente 4 clientes", opts: ["0.1339", "0.1606", "0.2240", "0.0892"], correct: 0, exp: "P(X=4) = e⁻⁶·6⁴/4! = 0.0025×1296/24 = 0.1339 = 13.39%." },
+      { text: "¿Cuál es P(X ≤ 2)? — A lo más 2 clientes", opts: ["0.1912", "0.0620", "0.0446", "0.2384"], correct: 1, exp: "P(X≤2) = P(0)+P(1)+P(2) = 0.0025+0.0149+0.0446 = 0.0620 = 6.20%." },
+      { text: "¿Cuál es P(X ≥ 8)? — Saturación (más de 7 clientes)", opts: ["0.1528", "0.2560", "0.3840", "0.0892"], correct: 1, exp: "P(X≥8) = 1 - F(7) = 1 - 0.7440 = 0.2560 = 25.60%. Alta chance de saturación." },
+      { text: "¿Cuál es P(X ≤ 6)? — A lo más 6 clientes (carga normal)", opts: ["0.6063", "0.7440", "0.5543", "0.8270"], correct: 0, exp: "P(X≤6) = F(6) = 0.6063 = 60.63%. Solo el 60% de las horas tienen carga normal o menor." },
+      { text: "¿Cuál es P(4 ≤ X ≤ 8)? — Rango de trabajo normal", opts: ["0.5765", "0.6879", "0.4312", "0.7440"], correct: 0, exp: "P(4≤X≤8) = F(8)-F(3) = 0.8472-0.1512 = 0.5765 = 57.65%. La mayoría de las horas caen en este rango operativo." },
+    ]
+  },
+  {
+    id: "auditoria", dist: "hyper", color: T.hyper, emoji: "📦",
+    titulo: "Auditoría de Inventario — Control de Lote",
+    contexto: "Un lote de N=200 bombillas contiene K=10 defectuosas. Se inspeccionan n=15 sin reemplazo. Sea X = defectuosas en la muestra.",
+    modelo: "X ~ Hipergeométrica(N=200, K=10, n=15)",
+    params: { N: 200, K: 10, n: 15 },
+    preguntas: [
+      { text: "¿Cuál es P(X = 0)? — Ninguna defectuosa en muestra", opts: ["0.1365", "0.3835", "0.4500", "0.9701"], correct: 2, exp: "P(X=0) = C(10,0)·C(190,15)/C(200,15) ≈ 0.4500 = 45.00%. Casi la mitad de las veces la muestra parece perfecta." },
+      { text: "¿Cuál es P(X = 2)? — Exactamente 2 defectuosas", opts: ["0.1365", "0.3835", "0.4500", "0.0238"], correct: 0, exp: "P(X=2) = C(10,2)·C(190,13)/C(200,15) ≈ 0.1365 = 13.65%." },
+      { text: "¿Cuál es P(X ≤ 2)? — Muestra con pocas defectuosas", opts: ["0.9701", "0.8335", "0.5865", "0.1365"], correct: 0, exp: "P(X≤2) = P(0)+P(1)+P(2) ≈ 0.4500+0.3835+0.1365 = 0.9701 = 97.01%." },
+      { text: "¿Cuál es P(X ≥ 3)? — Al menos 3 defectuosas (alerta)", opts: ["0.0299", "0.0620", "0.1365", "0.0446"], correct: 0, exp: "P(X≥3) = 1 - P(X≤2) = 1 - 0.9701 = 0.0299 = 2.99%. Solo el 3% activa la alerta de calidad." },
+      { text: "¿Cuál es P(1 ≤ X ≤ 3)? — Rango de detección típica", opts: ["0.5299", "0.6200", "0.4500", "0.7440"], correct: 0, exp: "P(1≤X≤3) = P(X≤3)-P(X=0) ≈ 0.9940-0.4500 = 0.5299 = 52.99%. Más de la mitad de las inspecciones detectan 1-3 defectos." },
+    ]
+  },
+  {
+    id: "embotelladora", dist: "normal", color: T.normal, emoji: "🍶",
+    titulo: "Máquina Embotelladora — Control de Volumen",
+    contexto: "Una máquina llena botellas con μ = 500 ml y σ = 4 ml. El volumen sigue distribución Normal. Probabilidades de llenado.",
+    modelo: "X ~ Normal(μ=500, σ=4)",
+    params: { mu: 500, sigma: 4 },
+    preguntas: [
+      { text: "¿Cuál es P(X < 495)? — Menos de 495 ml (quejas de clientes)", opts: ["0.1056", "0.2266", "0.0228", "0.3085"], correct: 0, exp: "z = (495-500)/4 = -1.25 → P(X<495) = 0.1056 = 10.56%." },
+      { text: "¿Cuál es P(X > 508)? — Más de 508 ml (desperdicio)", opts: ["0.1056", "0.0228", "0.2266", "0.0062"], correct: 1, exp: "z = (508-500)/4 = 2 → P(X>508) = 1-Φ(2) = 0.0228 = 2.28%." },
+      { text: "¿Cuál es P(X ≤ 500)? — A lo más la media exacta", opts: ["0.5000", "0.6827", "0.3173", "0.2500"], correct: 0, exp: "P(X≤μ) = 0.5000 = 50%. En la Normal simétrica, exactamente la mitad queda bajo la media." },
+      { text: "¿Cuál es P(X ≥ 496)? — Al menos 496 ml (especificación mínima)", opts: ["0.8413", "0.6827", "0.9772", "0.7257"], correct: 0, exp: "z = (496-500)/4 = -1 → P(X≥496) = 1-Φ(-1) = Φ(1) = 0.8413 = 84.13%." },
+      { text: "¿Cuál es P(498 < X < 502)? — Rango ideal ±2ml", opts: ["0.1915", "0.3829", "0.6827", "0.2417"], correct: 1, exp: "P(498<X<502): zₗ=(498-500)/4=-0.5, zᵤ=(502-500)/4=0.5. P = Φ(0.5)-Φ(-0.5) = 0.3829 = 38.29%." },
+    ]
+  },
+];
+
+// ══════════════════════════════════════════
+// CALCULADORA INTERACTIVA — 4 distribuciones + Casos integrados
 // ══════════════════════════════════════════
 const TabCalculadora = () => {
   const [dist, setDist] = useState("binom");
   const [highlightK, setHighlightK] = useState(null);
   const [showCDF, setShowCDF] = useState(false);
-  const [queryK, setQueryK] = useState("");
+  const [queryA, setQueryA] = useState(""); // valor a (o único)
+  const [queryB, setQueryB] = useState(""); // valor b (solo para intervalo)
   const [queryResult, setQueryResult] = useState(null);
   const [queryType, setQueryType] = useState("eq"); // eq | le | ge | range
+  const [activeMode, setActiveMode] = useState("libre"); // "libre" | "caso"
+  const [casoIdx, setCasoIdx] = useState(0);
+  const [casoAnswers, setCasoAnswers] = useState({});
+  const [casoCompleted, setCasoCompleted] = useState({});
 
-  // Parámetros
+  // Parámetros libres
   const [bn, setBn] = useState(10); const [bp, setBp] = useState(0.3);
   const [pl, setPl] = useState(4);
   const [hN, setHN] = useState(50); const [hK, setHK] = useState(10); const [hn, setHn] = useState(8);
   const [nmu, setNmu] = useState(70); const [nsigma, setNsigma] = useState(10);
-  const [normalRange, setNormalRange] = useState([60, 80]);
+
+  // Cuando cambia a modo caso, sincronizar parámetros
+  const caso = CASOS[casoIdx];
+  const casoAnsw = casoAnswers[casoIdx] || {};
+
+  const getParamsForMode = () => {
+    if (activeMode === "caso") {
+      const c = CASOS[casoIdx];
+      if (c.dist === "binom") return { dist: "binom", bn: c.params.n, bp: c.params.p, pl, hN, hK, hn, nmu, nsigma };
+      if (c.dist === "poisson") return { dist: "poisson", bn, bp, pl: c.params.lambda, hN, hK, hn, nmu, nsigma };
+      if (c.dist === "hyper") return { dist: "hyper", bn, bp, pl, hN: c.params.N, hK: c.params.K, hn: c.params.n, nmu, nsigma };
+      if (c.dist === "normal") return { dist: "normal", bn, bp, pl, hN, hK, hn, nmu: c.params.mu, nsigma: c.params.sigma };
+    }
+    return { dist, bn, bp, pl, hN, hK, hn, nmu, nsigma };
+  };
+  const p = getParamsForMode();
+  const activeDist = activeMode === "caso" ? CASOS[casoIdx].dist : dist;
 
   const distData = useMemo(() => {
-    if (dist === "binom") return buildBinom(bn, bp);
-    if (dist === "poisson") return buildPoisson(pl);
-    if (dist === "hyper") return buildHyper(hN, hK, hn);
-    return buildNormal(nmu, nsigma);
-  }, [dist, bn, bp, pl, hN, hK, hn, nmu, nsigma]);
+    if (activeDist === "binom") return buildBinom(p.bn, p.bp);
+    if (activeDist === "poisson") return buildPoisson(p.pl);
+    if (activeDist === "hyper") return buildHyper(p.hN, p.hK, p.hn);
+    return buildNormal(p.nmu, p.nsigma);
+  }, [activeDist, p.bn, p.bp, p.pl, p.hN, p.hK, p.hn, p.nmu, p.nsigma]);
 
-  const color = dist === "binom" ? T.binom : dist === "poisson" ? T.poisson : dist === "hyper" ? T.hyper : T.normal;
-  const isDiscrete = dist !== "normal";
+  const color = activeDist === "binom" ? T.binom : activeDist === "poisson" ? T.poisson : activeDist === "hyper" ? T.hyper : T.normal;
+  const isDiscrete = activeDist !== "normal";
 
   const stats = useMemo(() => {
-    if (dist === "binom") return { EX: (bn * bp).toFixed(3), Var: (bn * bp * (1 - bp)).toFixed(3), sigma: Math.sqrt(bn * bp * (1 - bp)).toFixed(3) };
-    if (dist === "poisson") return { EX: pl.toFixed(2), Var: pl.toFixed(2), sigma: Math.sqrt(pl).toFixed(3) };
-    if (dist === "hyper") {
-      const ex = (hn * hK / hN).toFixed(3);
-      const v = hn * (hK / hN) * (1 - hK / hN) * (hN - hn) / (hN - 1);
+    if (activeDist === "binom") return { EX: (p.bn * p.bp).toFixed(3), Var: (p.bn * p.bp * (1 - p.bp)).toFixed(3), sigma: Math.sqrt(p.bn * p.bp * (1 - p.bp)).toFixed(3) };
+    if (activeDist === "poisson") return { EX: p.pl.toFixed(2), Var: p.pl.toFixed(2), sigma: Math.sqrt(p.pl).toFixed(3) };
+    if (activeDist === "hyper") {
+      const ex = (p.hn * p.hK / p.hN).toFixed(3);
+      const v = p.hn * (p.hK / p.hN) * (1 - p.hK / p.hN) * (p.hN - p.hn) / (p.hN - 1);
       return { EX: ex, Var: v.toFixed(3), sigma: Math.sqrt(v).toFixed(3) };
     }
-    return { EX: nmu.toFixed(2), Var: (nsigma ** 2).toFixed(2), sigma: nsigma.toFixed(2) };
-  }, [dist, bn, bp, pl, hN, hK, hn, nmu, nsigma]);
+    return { EX: p.nmu.toFixed(2), Var: (p.nsigma ** 2).toFixed(2), sigma: p.nsigma.toFixed(2) };
+  }, [activeDist, p.bn, p.bp, p.pl, p.hN, p.hK, p.hn, p.nmu, p.nsigma]);
 
-  const computeQuery = () => {
-    const k = parseFloat(queryK);
-    if (isNaN(k)) return;
-    let prob = 0;
+  // Cálculo de probabilidad con área sombreada
+  const computeProb = (type, a, b) => {
+    const ka = parseFloat(a), kb = parseFloat(b);
+    if (isNaN(ka)) return null;
     if (isDiscrete) {
-      if (queryType === "eq") prob = distData.find(d => d.k === Math.round(k))?.prob || 0;
-      else if (queryType === "le") prob = distData.find(d => d.k === Math.round(k))?.cdf || 0;
-      else if (queryType === "ge") {
-        const cdfPrev = Math.round(k) > 0 ? (distData.find(d => d.k === Math.round(k) - 1)?.cdf || 0) : 0;
-        prob = 1 - cdfPrev;
+      if (type === "eq") { const d = distData.find(x => x.k === Math.round(ka)); return { prob: d?.prob || 0, shadeMin: Math.round(ka), shadeMax: Math.round(ka) }; }
+      if (type === "le") { const d = distData.find(x => x.k === Math.round(ka)); return { prob: d?.cdf || 0, shadeMin: 0, shadeMax: Math.round(ka) }; }
+      if (type === "ge") { const cdfPrev = Math.round(ka) > 0 ? (distData.find(x => x.k === Math.round(ka) - 1)?.cdf || 0) : 0; return { prob: 1 - cdfPrev, shadeMin: Math.round(ka), shadeMax: 999 }; }
+      if (type === "range" && !isNaN(kb)) {
+        const dA = distData.find(x => x.k === Math.round(ka)); const dB = distData.find(x => x.k === Math.round(kb));
+        const pA = Math.round(ka) > 0 ? (distData.find(x => x.k === Math.round(ka) - 1)?.cdf || 0) : 0;
+        const pB = dB?.cdf || 0;
+        return { prob: pB - pA, shadeMin: Math.round(ka), shadeMax: Math.round(kb) };
       }
     } else {
-      if (queryType === "le") prob = normalCDF(nmu, nsigma, k);
-      else if (queryType === "ge") prob = 1 - normalCDF(nmu, nsigma, k);
-      else if (queryType === "eq") { prob = normalPDF(nmu, nsigma, k); }
+      if (type === "le") return { prob: normalCDF(p.nmu, p.nsigma, ka), shadeMin: -Infinity, shadeMax: ka };
+      if (type === "ge") return { prob: 1 - normalCDF(p.nmu, p.nsigma, ka), shadeMin: ka, shadeMax: Infinity };
+      if (type === "range" && !isNaN(kb)) return { prob: normalCDF(p.nmu, p.nsigma, kb) - normalCDF(p.nmu, p.nsigma, ka), shadeMin: ka, shadeMax: kb };
+      if (type === "eq") return { prob: normalPDF(p.nmu, p.nsigma, ka), shadeMin: ka - p.nsigma * 0.1, shadeMax: ka + p.nsigma * 0.1 };
     }
-    setQueryResult({ k, prob, type: queryType });
+    return null;
+  };
+
+  const computeQuery = () => {
+    const r = computeProb(queryType, queryA, queryB);
+    if (r) setQueryResult({ a: parseFloat(queryA), b: parseFloat(queryB), type: queryType, ...r });
+  };
+
+  // Datos de gráfica con área sombreada
+  const shadeRange = queryResult ? { min: queryResult.shadeMin, max: queryResult.shadeMax } : null;
+
+  const chartDataWithShade = useMemo(() => {
+    if (!shadeRange) return distData;
+    if (!isDiscrete) {
+      return distData.map(d => ({
+        ...d,
+        shade: d.x >= shadeRange.min && d.x <= shadeRange.max ? d.pdf : null,
+      }));
+    }
+    return distData;
+  }, [distData, shadeRange, isDiscrete]);
+
+  // Caso: answer handler
+  const handleCasoAnswer = (qi, oi) => {
+    if (casoAnsw[qi] !== undefined) return;
+    const newA = { ...casoAnswers, [casoIdx]: { ...casoAnsw, [qi]: oi } };
+    setCasoAnswers(newA);
+    if (Object.keys({ ...casoAnsw, [qi]: oi }).length === CASOS[casoIdx].preguntas.length) {
+      setCasoCompleted(c => ({ ...c, [casoIdx]: true }));
+    }
   };
 
   const DIST_TABS = [
@@ -553,102 +684,173 @@ const TabCalculadora = () => {
     { id: "normal", label: "Normal", emoji: "🔔", color: T.normal },
   ];
 
+  const QUERY_TYPES = [
+    { id: "eq", label: "= k", tip: "Exactamente k" },
+    { id: "le", label: "≤ k", tip: "A lo más k" },
+    { id: "ge", label: "≥ k", tip: "Al menos k" },
+    { id: "range", label: "a ≤ X ≤ b", tip: "Intervalo" },
+  ];
+
+  const queryLabel = () => {
+    if (!queryResult) return "";
+    const { type, a, b } = queryResult;
+    if (type === "eq") return `P(X = ${a})`;
+    if (type === "le") return `P(X ≤ ${a})`;
+    if (type === "ge") return `P(X ≥ ${a})`;
+    if (type === "range") return `P(${a} ≤ X ≤ ${b})`;
+    return "";
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
 
-      {/* Selector distribución */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {DIST_TABS.map(d => (
-          <button key={d.id} onClick={() => { setDist(d.id); setHighlightK(null); setQueryResult(null); }}
-            style={{
-              flex: 1, minWidth: 130, padding: "12px 18px", borderRadius: 14, border: "none", cursor: "pointer",
-              fontWeight: 800, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-              background: dist === d.id ? `linear-gradient(135deg,${d.color},${d.color}bb)` : `${d.color}10`,
-              color: dist === d.id ? "white" : d.color,
-              boxShadow: dist === d.id ? `0 4px 18px ${d.color}40` : "none",
-              outline: dist !== d.id ? `1px solid ${d.color}30` : "none",
-              transition: "all 0.2s"
-            }}>
-            <span style={{ fontSize: 18 }}>{d.emoji}</span>{d.label}
-          </button>
+      {/* Modo selector */}
+      <div style={{ display: "flex", gap: 8 }}>
+        {[["libre", "🎛️ Exploración libre"], ["caso", "🏭 Casos aplicados"]].map(([id, lbl]) => (
+          <button key={id} onClick={() => setActiveMode(id)} style={{
+            flex: 1, padding: "12px 20px", borderRadius: 13, border: "none", cursor: "pointer",
+            fontWeight: 800, fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            background: activeMode === id ? `linear-gradient(135deg,${T.accent},#4f46e5)` : "rgba(255,255,255,0.04)",
+            color: activeMode === id ? "white" : T.muted,
+            boxShadow: activeMode === id ? `0 4px 18px ${T.accent}35` : "none",
+            outline: activeMode !== id ? `1px solid rgba(255,255,255,0.08)` : "none",
+            transition: "all 0.2s"
+          }}>{lbl}</button>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 18 }}>
+      {/* Selector distribución (solo en modo libre) */}
+      {activeMode === "libre" && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {DIST_TABS.map(d => (
+            <button key={d.id} onClick={() => { setDist(d.id); setHighlightK(null); setQueryResult(null); }}
+              style={{
+                flex: 1, minWidth: 130, padding: "11px 16px", borderRadius: 13, border: "none", cursor: "pointer",
+                fontWeight: 800, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                background: dist === d.id ? `linear-gradient(135deg,${d.color},${d.color}bb)` : `${d.color}10`,
+                color: dist === d.id ? "white" : d.color,
+                boxShadow: dist === d.id ? `0 4px 18px ${d.color}40` : "none",
+                outline: dist !== d.id ? `1px solid ${d.color}30` : "none", transition: "all 0.2s"
+              }}>
+              <span style={{ fontSize: 18 }}>{d.emoji}</span>{d.label}
+            </button>
+          ))}
+        </div>
+      )}
 
-        {/* Panel de parámetros */}
+      {/* Selector de caso (solo en modo caso) */}
+      {activeMode === "caso" && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {CASOS.map((c, i) => (
+            <button key={c.id} onClick={() => { setCasoIdx(i); setQueryResult(null); }}
+              style={{
+                flex: 1, minWidth: 140, padding: "11px 14px", borderRadius: 13, border: "none", cursor: "pointer",
+                fontWeight: 800, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                background: casoIdx === i ? `linear-gradient(135deg,${c.color},${c.color}bb)` : `${c.color}10`,
+                color: casoIdx === i ? "white" : c.color,
+                boxShadow: casoIdx === i ? `0 4px 14px ${c.color}40` : "none",
+                outline: casoIdx !== i ? `1px solid ${c.color}30` : "none", transition: "all 0.2s",
+                position: "relative"
+              }}>
+              <span>{c.emoji}</span>{c.titulo.split("—")[0].trim()}
+              {casoCompleted[i] && <span style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: T.green, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "white", fontWeight: 900, border: `2px solid ${T.bg}` }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Layout principal: parámetros + gráfica + preguntas */}
+      <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 18, alignItems: "start" }}>
+
+        {/* Panel izquierdo: parámetros + calculadora */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Panel color={color} style={{ padding: 22 }}>
-            <h4 style={{ color: T.white, fontWeight: 900, fontSize: 15, marginBottom: 16 }}>
-              ⚙️ Parámetros
+
+          {/* Contexto del caso */}
+          {activeMode === "caso" && (
+            <div style={{ padding: "16px 18px", borderRadius: 16, background: `${color}08`, border: `1.5px solid ${color}30` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 22 }}>{caso.emoji}</span>
+                <div>
+                  <p style={{ color: color, fontWeight: 900, fontSize: 13 }}>{caso.titulo.split("—")[0].trim()}</p>
+                  <p style={{ color: T.muted, fontSize: 11, fontFamily: "monospace" }}>{caso.modelo}</p>
+                </div>
+              </div>
+              <p style={{ color: "#94a3b8", fontSize: 12, lineHeight: 1.7 }}>{caso.contexto}</p>
+            </div>
+          )}
+
+          <Panel color={color} style={{ padding: 20 }}>
+            <h4 style={{ color: T.white, fontWeight: 900, fontSize: 14, marginBottom: 14 }}>
+              {activeMode === "caso" ? "⚙️ Parámetros del modelo" : "⚙️ Parámetros"}
             </h4>
 
-            {dist === "binom" && <>
-              {[
-                { label: "n — Número de ensayos", val: bn, set: setBn, min: 1, max: 30, step: 1, color: T.binom },
-                { label: "p — Probabilidad de éxito", val: bp, set: setBp, min: 0.01, max: 0.99, step: 0.01, color: T.pink, fmt: v => v.toFixed(2) },
+            {activeMode === "libre" ? (<>
+              {activeDist === "binom" && [
+                { label: "n — Número de ensayos", val: bn, set: setBn, min: 1, max: 30, step: 1, col: T.binom },
+                { label: "p — Probabilidad de éxito", val: bp, set: setBp, min: 0.01, max: 0.99, step: 0.01, col: T.pink, fmt: v => v.toFixed(2) },
               ].map((s, i) => (
-                <div key={i} style={{ marginBottom: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <div key={i} style={{ marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                     <span style={{ color: T.muted, fontSize: 12, fontWeight: 700 }}>{s.label}</span>
                     <span style={{ color: T.white, fontWeight: 900, fontSize: 14, fontFamily: "Georgia,serif" }}>{s.fmt ? s.fmt(s.val) : s.val}</span>
                   </div>
                   <input type="range" min={s.min} max={s.max} step={s.step} value={s.val}
                     onChange={e => { s.set(+e.target.value); setHighlightK(null); setQueryResult(null); }}
-                    style={{ width: "100%", accentColor: s.color, cursor: "pointer" }} />
+                    style={{ width: "100%", accentColor: s.col, cursor: "pointer" }} />
                 </div>
               ))}
-            </>}
-
-            {dist === "poisson" && (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ color: T.muted, fontSize: 12, fontWeight: 700 }}>λ — Tasa de eventos</span>
-                  <span style={{ color: T.white, fontWeight: 900, fontSize: 16, fontFamily: "Georgia,serif" }}>{pl}</span>
+              {activeDist === "poisson" && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: T.muted, fontSize: 12, fontWeight: 700 }}>λ — Tasa de eventos</span>
+                    <span style={{ color: T.white, fontWeight: 900, fontSize: 14, fontFamily: "Georgia,serif" }}>{pl}</span>
+                  </div>
+                  <input type="range" min={0.5} max={20} step={0.5} value={pl}
+                    onChange={e => { setPl(+e.target.value); setHighlightK(null); setQueryResult(null); }}
+                    style={{ width: "100%", accentColor: T.poisson, cursor: "pointer" }} />
                 </div>
-                <input type="range" min={0.5} max={20} step={0.5} value={pl}
-                  onChange={e => { setPl(+e.target.value); setHighlightK(null); setQueryResult(null); }}
-                  style={{ width: "100%", accentColor: T.poisson, cursor: "pointer" }} />
+              )}
+              {activeDist === "hyper" && [
+                { label: "N — Población total", val: hN, set: setHN, min: 10, max: 200, step: 5, col: T.hyper },
+                { label: "K — Éxitos en población", val: hK, set: setHK, min: 1, max: hN - 1, step: 1, col: T.pink },
+                { label: "n — Tamaño muestra", val: hn, set: setHn, min: 1, max: Math.min(hN, 20), step: 1, col: T.green },
+              ].map((s, i) => (
+                <div key={i} style={{ marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: T.muted, fontSize: 12, fontWeight: 700 }}>{s.label}</span>
+                    <span style={{ color: T.white, fontWeight: 900, fontSize: 14, fontFamily: "Georgia,serif" }}>{s.val}</span>
+                  </div>
+                  <input type="range" min={s.min} max={s.max} step={s.step} value={s.val}
+                    onChange={e => { s.set(+e.target.value); setHighlightK(null); setQueryResult(null); }}
+                    style={{ width: "100%", accentColor: s.col, cursor: "pointer" }} />
+                </div>
+              ))}
+              {activeDist === "normal" && [
+                { label: "μ — Media", val: nmu, set: setNmu, min: 0, max: 200, step: 1, col: T.normal },
+                { label: "σ — Desv. estándar", val: nsigma, set: setNsigma, min: 1, max: 50, step: 1, col: T.pink },
+              ].map((s, i) => (
+                <div key={i} style={{ marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <span style={{ color: T.muted, fontSize: 12, fontWeight: 700 }}>{s.label}</span>
+                    <span style={{ color: T.white, fontWeight: 900, fontSize: 14, fontFamily: "Georgia,serif" }}>{s.val}</span>
+                  </div>
+                  <input type="range" min={s.min} max={s.max} step={s.step} value={s.val}
+                    onChange={e => { s.set(+e.target.value); setHighlightK(null); setQueryResult(null); }}
+                    style={{ width: "100%", accentColor: s.col, cursor: "pointer" }} />
+                </div>
+              ))}
+            </>) : (
+              /* Modo caso: mostrar parámetros fijos */
+              <div style={{ padding: "12px 14px", borderRadius: 12, background: "rgba(0,0,0,0.2)", border: `1px solid ${color}25` }}>
+                {activeDist === "binom" && <p style={{ color: color, fontFamily: "monospace", fontSize: 13 }}>n = {caso.params.n},  p = {caso.params.p}</p>}
+                {activeDist === "poisson" && <p style={{ color: color, fontFamily: "monospace", fontSize: 13 }}>λ = {caso.params.lambda}</p>}
+                {activeDist === "hyper" && <p style={{ color: color, fontFamily: "monospace", fontSize: 12 }}>N={caso.params.N}, K={caso.params.K}, n={caso.params.n}</p>}
+                {activeDist === "normal" && <p style={{ color: color, fontFamily: "monospace", fontSize: 13 }}>μ = {caso.params.mu},  σ = {caso.params.sigma}</p>}
               </div>
             )}
 
-            {dist === "hyper" && <>
-              {[
-                { label: "N — Tamaño total de la población", val: hN, set: setHN, min: 10, max: 200, step: 5, color: T.hyper },
-                { label: "K — Éxitos en la población", val: hK, set: setHK, min: 1, max: hN - 1, step: 1, color: T.pink },
-                { label: "n — Tamaño de la muestra", val: hn, set: setHn, min: 1, max: Math.min(hN, 20), step: 1, color: T.green },
-              ].map((s, i) => (
-                <div key={i} style={{ marginBottom: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ color: T.muted, fontSize: 12, fontWeight: 700 }}>{s.label}</span>
-                    <span style={{ color: T.white, fontWeight: 900, fontSize: 14, fontFamily: "Georgia,serif" }}>{s.val}</span>
-                  </div>
-                  <input type="range" min={s.min} max={s.max} step={s.step} value={s.val}
-                    onChange={e => { s.set(+e.target.value); setHighlightK(null); setQueryResult(null); }}
-                    style={{ width: "100%", accentColor: s.color, cursor: "pointer" }} />
-                </div>
-              ))}
-            </>}
-
-            {dist === "normal" && <>
-              {[
-                { label: "μ — Media", val: nmu, set: setNmu, min: 0, max: 200, step: 1, color: T.normal },
-                { label: "σ — Desviación estándar", val: nsigma, set: setNsigma, min: 1, max: 50, step: 1, color: T.pink },
-              ].map((s, i) => (
-                <div key={i} style={{ marginBottom: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ color: T.muted, fontSize: 12, fontWeight: 700 }}>{s.label}</span>
-                    <span style={{ color: T.white, fontWeight: 900, fontSize: 14, fontFamily: "Georgia,serif" }}>{s.val}</span>
-                  </div>
-                  <input type="range" min={s.min} max={s.max} step={s.step} value={s.val}
-                    onChange={e => { s.set(+e.target.value); setHighlightK(null); setQueryResult(null); }}
-                    style={{ width: "100%", accentColor: s.color, cursor: "pointer" }} />
-                </div>
-              ))}
-            </>}
-
             {/* Métricas */}
-            <div style={{ borderTop: `1px solid ${color}20`, paddingTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ borderTop: `1px solid ${color}20`, paddingTop: 12, marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
               <StatChip label="E(X)" value={stats.EX} color={T.pink} />
               <StatChip label="Var(X)" value={stats.Var} color={T.yellow} />
               <StatChip label="σ(X)" value={stats.sigma} color={T.green} />
@@ -656,16 +858,14 @@ const TabCalculadora = () => {
           </Panel>
 
           {/* Calculadora de probabilidades */}
-          <Panel color={color} style={{ padding: 20 }}>
-            <h4 style={{ color: T.white, fontWeight: 900, fontSize: 14, marginBottom: 14 }}>🔢 Calcular P(X ?)</h4>
-            <div style={{ display: "flex", gap: 5, marginBottom: 12, flexWrap: "wrap" }}>
-              {[
-                { id: "eq", label: "= k", tip: "Exactamente" },
-                { id: "le", label: "≤ k", tip: "A lo más" },
-                { id: "ge", label: "≥ k", tip: "Al menos" },
-              ].map(qt => (
-                <button key={qt.id} onClick={() => setQueryType(qt.id)} style={{
-                  flex: 1, padding: "7px 10px", borderRadius: 9, border: "none", cursor: "pointer",
+          <Panel color={color} style={{ padding: 18 }}>
+            <h4 style={{ color: T.white, fontWeight: 900, fontSize: 13, marginBottom: 12 }}>🔢 Calcular P(X)</h4>
+
+            {/* Tipo de query — 4 botones en grid 2x2 */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 12 }}>
+              {QUERY_TYPES.filter(qt => isDiscrete || qt.id !== "eq").map(qt => (
+                <button key={qt.id} onClick={() => { setQueryType(qt.id); setQueryResult(null); }} style={{
+                  padding: "8px 8px", borderRadius: 9, border: "none", cursor: "pointer",
                   background: queryType === qt.id ? color : `${color}12`,
                   color: queryType === qt.id ? "white" : color,
                   fontWeight: 800, fontSize: 12, outline: queryType !== qt.id ? `1px solid ${color}30` : "none",
@@ -673,167 +873,237 @@ const TabCalculadora = () => {
                 }}>{qt.label}</button>
               ))}
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                type="number"
-                value={queryK}
-                onChange={e => setQueryK(e.target.value)}
-                placeholder={isDiscrete ? "k entero" : "valor x"}
-                style={{
-                  flex: 1, padding: "10px 14px", borderRadius: 10,
-                  background: "rgba(255,255,255,0.04)", border: `1px solid ${color}30`,
-                  color: T.white, fontSize: 14, fontWeight: 700, outline: "none"
-                }} />
-              <button onClick={computeQuery} style={{
-                padding: "10px 16px", borderRadius: 10, border: "none", cursor: "pointer",
-                background: `linear-gradient(135deg,${color},${color}bb)`,
-                color: "white", fontWeight: 800, fontSize: 13,
-                boxShadow: `0 4px 12px ${color}35`
-              }}>=</button>
+
+            {/* Inputs */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              <div style={{ display: "flex", gap: 7 }}>
+                <input type="number" value={queryA} onChange={e => setQueryA(e.target.value)}
+                  placeholder={queryType === "range" ? "a (mínimo)" : isDiscrete ? "k entero" : "valor x"}
+                  style={{ flex: 1, padding: "9px 12px", borderRadius: 9, background: "rgba(255,255,255,0.04)", border: `1px solid ${color}30`, color: T.white, fontSize: 13, fontWeight: 700, outline: "none" }} />
+                <button onClick={computeQuery} style={{
+                  padding: "9px 14px", borderRadius: 9, border: "none", cursor: "pointer",
+                  background: `linear-gradient(135deg,${color},${color}bb)`, color: "white", fontWeight: 800, fontSize: 13,
+                  boxShadow: `0 4px 12px ${color}30`
+                }}>P=</button>
+              </div>
+              {queryType === "range" && (
+                <input type="number" value={queryB} onChange={e => setQueryB(e.target.value)}
+                  placeholder="b (máximo)"
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: 9, background: "rgba(255,255,255,0.04)", border: `1px solid ${color}30`, color: T.white, fontSize: 13, fontWeight: 700, outline: "none", boxSizing: "border-box" }} />
+              )}
             </div>
+
             {queryResult && (
-              <div style={{ marginTop: 12, padding: "14px 16px", borderRadius: 12, background: `${color}12`, border: `1.5px solid ${color}40` }}>
-                <p style={{ color: T.muted, fontSize: 11, marginBottom: 4 }}>
-                  P(X {queryResult.type === "eq" ? "=" : queryResult.type === "le" ? "≤" : "≥"} {queryResult.k})
-                </p>
-                <p style={{ color, fontWeight: 900, fontSize: 24, fontFamily: "Georgia,serif" }}>
-                  {(queryResult.prob * 100).toFixed(4)}%
-                </p>
-                <p style={{ color: T.muted, fontSize: 11, marginTop: 4 }}>= {queryResult.prob.toFixed(6)}</p>
+              <div style={{ marginTop: 10, padding: "12px 14px", borderRadius: 11, background: `${color}12`, border: `1.5px solid ${color}40` }}>
+                <p style={{ color: T.muted, fontSize: 11, marginBottom: 3 }}>{queryLabel()}</p>
+                <p style={{ color, fontWeight: 900, fontSize: 22, fontFamily: "Georgia,serif" }}>{(queryResult.prob * 100).toFixed(4)}%</p>
+                <p style={{ color: T.muted, fontSize: 10, marginTop: 2 }}>= {queryResult.prob.toFixed(6)}</p>
               </div>
             )}
           </Panel>
-        </div>
-
-        {/* Gráfico principal */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Panel color={color} style={{ padding: 22 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-              <h3 style={{ color: T.white, fontWeight: 900, fontSize: 16 }}>
-                {showCDF ? "CDF — F(x) = P(X ≤ x)" : "PMF/PDF — f(x) = P(X = x)"}
-              </h3>
-              <div style={{ display: "flex", gap: 7 }}>
-                {[["PMF", false], ["CDF", true]].map(([label, val]) => (
-                  <button key={label} onClick={() => setShowCDF(val)} style={{
-                    padding: "8px 18px", borderRadius: 10, border: "none", cursor: "pointer",
-                    fontWeight: 800, fontSize: 12,
-                    background: showCDF === val ? `linear-gradient(135deg,${color},${color}bb)` : `${color}10`,
-                    color: showCDF === val ? "white" : color,
-                    outline: showCDF !== val ? `1px solid ${color}30` : "none",
-                    transition: "all 0.2s"
-                  }}>{label}</button>
-                ))}
-              </div>
-            </div>
-
-            <ResponsiveContainer width="100%" height={320}>
-              {isDiscrete ? (
-                <BarChart data={distData} margin={{ top: 15, right: 20, left: 0, bottom: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                  <XAxis dataKey="k" tick={{ fill: T.muted, fontSize: 11 }}
-                    label={{ value: "k", position: "insideBottom", offset: -15, fill: T.muted, fontWeight: 700, fontSize: 13 }} />
-                  <YAxis tick={{ fill: T.muted, fontSize: 10 }} tickFormatter={v => (v * 100).toFixed(1) + "%"}
-                    label={{ value: showCDF ? "F(k)" : "P(X=k)", angle: -90, position: "insideLeft", fill: T.muted, fontSize: 12, offset: 10 }} />
-                  {!showCDF && <ReferenceLine x={Math.round(parseFloat(stats.EX))} stroke={T.pink} strokeDasharray="5 3"
-                    label={{ value: `μ=${stats.EX}`, fill: T.pink, fontSize: 11, position: "top" }} />}
-                  <Tooltip content={<CustomTooltip color={color} discrete={true} />} />
-                  <Bar dataKey={showCDF ? "cdf" : "prob"} radius={[5, 5, 0, 0]}
-                    name={showCDF ? "F(k)" : "P(X=k)"}
-                    onClick={d => setHighlightK(highlightK === d.k ? null : d.k)}>
-                    {distData.map((entry, i) => (
-                      <Cell key={i}
-                        fill={highlightK === entry.k ? T.yellow : color}
-                        opacity={highlightK !== null && highlightK !== entry.k ? 0.2 : 0.9} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              ) : (
-                <AreaChart data={distData} margin={{ top: 15, right: 20, left: 0, bottom: 40 }}>
-                  <defs>
-                    <linearGradient id="normalGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={color} stopOpacity={0.5} />
-                      <stop offset="100%" stopColor={color} stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                  <XAxis dataKey="x" tick={{ fill: T.muted, fontSize: 10 }}
-                    tickFormatter={v => v.toFixed(0)}
-                    label={{ value: "x", position: "insideBottom", offset: -15, fill: T.muted, fontWeight: 700, fontSize: 13 }} />
-                  <YAxis tick={{ fill: T.muted, fontSize: 10 }}
-                    label={{ value: showCDF ? "F(x)" : "f(x)", angle: -90, position: "insideLeft", fill: T.muted, fontSize: 12 }} />
-                  <ReferenceLine x={nmu} stroke={T.pink} strokeDasharray="5 3"
-                    label={{ value: `μ=${nmu}`, fill: T.pink, fontSize: 11 }} />
-                  <Tooltip content={<CustomTooltip color={color} discrete={false} />} />
-                  <Area type="monotone" dataKey={showCDF ? "cdf" : "pdf"}
-                    stroke={color} strokeWidth={2.5}
-                    fill={showCDF ? "none" : "url(#normalGrad)"}
-                    name={showCDF ? "F(x)" : "f(x)"} dot={false} />
-                </AreaChart>
-              )}
-            </ResponsiveContainer>
-
-            {/* Info al hacer click */}
-            {highlightK !== null && isDiscrete && (() => {
-              const d = distData.find(x => x.k === highlightK);
-              return d ? (
-                <div style={{ marginTop: 12, padding: "13px 16px", borderRadius: 12, background: `${T.yellow}12`, border: `1.5px solid ${T.yellow}35`, display: "flex", gap: 14, flexWrap: "wrap" }}>
-                  <div>
-                    <p style={{ color: T.muted, fontSize: 11 }}>P(X = {highlightK})</p>
-                    <p style={{ color: T.yellow, fontWeight: 900, fontSize: 20, fontFamily: "Georgia,serif" }}>{(d.prob * 100).toFixed(4)}%</p>
-                  </div>
-                  <div>
-                    <p style={{ color: T.muted, fontSize: 11 }}>F({highlightK}) = P(X ≤ {highlightK})</p>
-                    <p style={{ color: T.poisson, fontWeight: 900, fontSize: 20, fontFamily: "Georgia,serif" }}>{(d.cdf * 100).toFixed(4)}%</p>
-                  </div>
-                  <div>
-                    <p style={{ color: T.muted, fontSize: 11 }}>P(X ≥ {highlightK})</p>
-                    <p style={{ color: T.normal, fontWeight: 900, fontSize: 20, fontFamily: "Georgia,serif" }}>{((1 - (distData.find(x => x.k === highlightK - 1)?.cdf || 0)) * 100).toFixed(4)}%</p>
-                  </div>
-                </div>
-              ) : null;
-            })()}
-          </Panel>
 
           {/* Regla 68-95-99.7 para Normal */}
-          {dist === "normal" && (
-            <Panel color={T.normal} style={{ padding: 20 }}>
-              <h4 style={{ color: T.white, fontWeight: 900, fontSize: 14, marginBottom: 14 }}>📏 Regla 68-95-99.7 (Empírica)</h4>
-              <div style={{ display: "flex", gap: 8 }}>
+          {activeDist === "normal" && (
+            <Panel color={T.normal} style={{ padding: 16 }}>
+              <h4 style={{ color: T.white, fontWeight: 900, fontSize: 13, marginBottom: 12 }}>📏 Regla 68-95-99.7</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {[
-                  { label: "±1σ", pct: "68.27%", range: `[${(nmu - nsigma).toFixed(1)}, ${(nmu + nsigma).toFixed(1)}]`, color: T.normal },
-                  { label: "±2σ", pct: "95.45%", range: `[${(nmu - 2 * nsigma).toFixed(1)}, ${(nmu + 2 * nsigma).toFixed(1)}]`, color: T.yellow },
-                  { label: "±3σ", pct: "99.73%", range: `[${(nmu - 3 * nsigma).toFixed(1)}, ${(nmu + 3 * nsigma).toFixed(1)}]`, color: T.pink },
+                  { label: "±1σ", pct: "68.27%", range: `[${(p.nmu - p.nsigma).toFixed(1)}, ${(p.nmu + p.nsigma).toFixed(1)}]`, color: T.normal },
+                  { label: "±2σ", pct: "95.45%", range: `[${(p.nmu - 2 * p.nsigma).toFixed(1)}, ${(p.nmu + 2 * p.nsigma).toFixed(1)}]`, color: T.yellow },
+                  { label: "±3σ", pct: "99.73%", range: `[${(p.nmu - 3 * p.nsigma).toFixed(1)}, ${(p.nmu + 3 * p.nsigma).toFixed(1)}]`, color: T.pink },
                 ].map(r => (
-                  <div key={r.label} style={{ flex: 1, padding: "12px", borderRadius: 12, background: `${r.color}10`, border: `1px solid ${r.color}25`, textAlign: "center" }}>
-                    <p style={{ color: r.color, fontWeight: 900, fontSize: 14 }}>{r.label}</p>
-                    <p style={{ color: T.white, fontWeight: 900, fontSize: 18 }}>{r.pct}</p>
-                    <p style={{ color: T.muted, fontSize: 10, fontFamily: "monospace" }}>{r.range}</p>
+                  <div key={r.label} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 10, background: `${r.color}10`, border: `1px solid ${r.color}25` }}>
+                    <span style={{ color: r.color, fontWeight: 900, fontSize: 13, minWidth: 28 }}>{r.label}</span>
+                    <span style={{ color: T.white, fontWeight: 900, fontSize: 15 }}>{r.pct}</span>
+                    <span style={{ color: T.muted, fontSize: 10, fontFamily: "monospace", marginLeft: "auto" }}>{r.range}</span>
                   </div>
                 ))}
               </div>
             </Panel>
           )}
+        </div>
 
-          {/* Tabla de valores */}
-          {isDiscrete && distData.length <= 25 && (
+        {/* Panel derecho: gráfica + tabla/preguntas */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Panel color={color} style={{ padding: 22 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+              <div>
+                <h3 style={{ color: T.white, fontWeight: 900, fontSize: 15 }}>
+                  {showCDF ? "CDF — F(x) = P(X ≤ x)" : "PMF/PDF — f(x) = P(X = x)"}
+                </h3>
+                {queryResult && (
+                  <p style={{ color, fontSize: 12, fontWeight: 700, marginTop: 3 }}>
+                    Área sombreada: {queryLabel()} = <strong>{(queryResult.prob * 100).toFixed(3)}%</strong>
+                  </p>
+                )}
+              </div>
+              {activeMode === "libre" && (
+                <div style={{ display: "flex", gap: 7 }}>
+                  {[["PMF", false], ["CDF", true]].map(([label, val]) => (
+                    <button key={label} onClick={() => setShowCDF(val)} style={{
+                      padding: "7px 16px", borderRadius: 10, border: "none", cursor: "pointer",
+                      fontWeight: 800, fontSize: 12,
+                      background: showCDF === val ? `linear-gradient(135deg,${color},${color}bb)` : `${color}10`,
+                      color: showCDF === val ? "white" : color,
+                      outline: showCDF !== val ? `1px solid ${color}30` : "none", transition: "all 0.2s"
+                    }}>{label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <ResponsiveContainer width="100%" height={300}>
+              {isDiscrete ? (
+                <BarChart data={distData} margin={{ top: 15, right: 20, left: 0, bottom: 35 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                  <XAxis dataKey="k" tick={{ fill: T.muted, fontSize: 11 }}
+                    label={{ value: "k", position: "insideBottom", offset: -12, fill: T.muted, fontWeight: 700, fontSize: 13 }} />
+                  <YAxis tick={{ fill: T.muted, fontSize: 10 }} tickFormatter={v => (v * 100).toFixed(1) + "%"}
+                    label={{ value: showCDF ? "F(k)" : "P(X=k)", angle: -90, position: "insideLeft", fill: T.muted, fontSize: 11, offset: 10 }} />
+                  {!showCDF && <ReferenceLine x={Math.round(parseFloat(stats.EX))} stroke={T.pink} strokeDasharray="5 3"
+                    label={{ value: `μ`, fill: T.pink, fontSize: 11, position: "top" }} />}
+                  <Tooltip content={<CustomTooltip color={color} discrete={true} />} />
+                  <Bar dataKey={showCDF ? "cdf" : "prob"} radius={[4, 4, 0, 0]}
+                    name={showCDF ? "F(k)" : "P(X=k)"}
+                    onClick={d => setHighlightK(highlightK === d.k ? null : d.k)}>
+                    {distData.map((entry, i) => {
+                      const inShade = shadeRange && entry.k >= shadeRange.min && entry.k <= shadeRange.max;
+                      return (
+                        <Cell key={i}
+                          fill={inShade ? T.yellow : highlightK === entry.k ? T.yellow : color}
+                          opacity={shadeRange ? (inShade ? 1 : 0.2) : (highlightK !== null && highlightK !== entry.k ? 0.2 : 0.85)} />
+                      );
+                    })}
+                  </Bar>
+                </BarChart>
+              ) : (
+                <AreaChart data={chartDataWithShade} margin={{ top: 15, right: 20, left: 0, bottom: 35 }}>
+                  <defs>
+                    <linearGradient id="normalGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+                      <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="shadeGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={T.yellow} stopOpacity={0.7} />
+                      <stop offset="100%" stopColor={T.yellow} stopOpacity={0.1} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                  <XAxis dataKey="x" tick={{ fill: T.muted, fontSize: 10 }} tickFormatter={v => v.toFixed(0)}
+                    label={{ value: "x", position: "insideBottom", offset: -12, fill: T.muted, fontWeight: 700, fontSize: 13 }} />
+                  <YAxis tick={{ fill: T.muted, fontSize: 10 }}
+                    label={{ value: "f(x)", angle: -90, position: "insideLeft", fill: T.muted, fontSize: 11 }} />
+                  <ReferenceLine x={p.nmu} stroke={T.pink} strokeDasharray="5 3"
+                    label={{ value: `μ=${p.nmu}`, fill: T.pink, fontSize: 11 }} />
+                  <Tooltip content={<CustomTooltip color={color} discrete={false} />} />
+                  <Area type="monotone" dataKey="pdf" stroke={color} strokeWidth={2.5} fill="url(#normalGrad)" name="f(x)" dot={false} />
+                  {shadeRange && <Area type="monotone" dataKey="shade" stroke="none" fill="url(#shadeGrad)" dot={false} name="Área" />}
+                </AreaChart>
+              )}
+            </ResponsiveContainer>
+
+            {/* Info al hacer click (modo libre, discreto) */}
+            {highlightK !== null && isDiscrete && activeMode === "libre" && (() => {
+              const d = distData.find(x => x.k === highlightK);
+              return d ? (
+                <div style={{ marginTop: 10, padding: "11px 14px", borderRadius: 11, background: `${T.yellow}12`, border: `1.5px solid ${T.yellow}35`, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <div><p style={{ color: T.muted, fontSize: 11 }}>P(X = {highlightK})</p><p style={{ color: T.yellow, fontWeight: 900, fontSize: 18, fontFamily: "Georgia,serif" }}>{(d.prob * 100).toFixed(4)}%</p></div>
+                  <div><p style={{ color: T.muted, fontSize: 11 }}>F({highlightK}) = P(X ≤ {highlightK})</p><p style={{ color: T.poisson, fontWeight: 900, fontSize: 18, fontFamily: "Georgia,serif" }}>{(d.cdf * 100).toFixed(4)}%</p></div>
+                  <div><p style={{ color: T.muted, fontSize: 11 }}>P(X ≥ {highlightK})</p><p style={{ color: T.normal, fontWeight: 900, fontSize: 18, fontFamily: "Georgia,serif" }}>{((1 - (distData.find(x => x.k === highlightK - 1)?.cdf || 0)) * 100).toFixed(4)}%</p></div>
+                </div>
+              ) : null;
+            })()}
+          </Panel>
+
+          {/* PREGUNTAS DEL CASO (modo caso) */}
+          {activeMode === "caso" && (
+            <Panel color={color} style={{ padding: 24 }}>
+              <h4 style={{ color: T.white, fontWeight: 900, fontSize: 15, marginBottom: 18 }}>🧠 Preguntas de Aplicación — {caso.titulo.split("—")[0].trim()}</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {caso.preguntas.map((q, qi) => {
+                  const ans = casoAnsw[qi];
+                  const show = ans !== undefined;
+                  return (
+                    <div key={qi} style={{
+                      padding: "16px 18px", borderRadius: 13,
+                      background: show ? (ans === q.correct ? `${T.green}08` : `${T.red}08`) : "rgba(255,255,255,0.02)",
+                      border: `1px solid ${show ? (ans === q.correct ? T.green : T.red) + "30" : "rgba(255,255,255,0.07)"}`,
+                      transition: "all 0.2s"
+                    }}>
+                      <p style={{ color: T.white, fontWeight: 700, fontSize: 13, marginBottom: 12 }}>
+                        <span style={{ color: color, fontWeight: 900 }}>Q{qi + 1}.</span> {q.text}
+                      </p>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginBottom: show ? 12 : 0 }}>
+                        {q.opts.map((o, oi) => {
+                          const isSel = ans === oi, isOk = oi === q.correct;
+                          return (
+                            <button key={oi} onClick={() => handleCasoAnswer(qi, oi)} style={{
+                              padding: "9px 12px", borderRadius: 9, border: "none",
+                              cursor: show ? "default" : "pointer", fontWeight: 700, fontSize: 12, textAlign: "left",
+                              background: show ? (isOk ? `${T.green}20` : isSel ? `${T.red}20` : "rgba(255,255,255,0.03)") : "rgba(255,255,255,0.04)",
+                              color: show ? (isOk ? T.green : isSel ? T.red : T.muted) : "#94a3b8",
+                              outline: show ? (isOk ? `1.5px solid ${T.green}` : isSel ? `1.5px solid ${T.red}` : `1px solid rgba(255,255,255,0.06)`) : `1px solid rgba(255,255,255,0.06)`,
+                              display: "flex", alignItems: "center", gap: 7, transition: "all 0.15s"
+                            }}
+                              onMouseEnter={e => { if (!show) { e.currentTarget.style.background = `${color}15`; e.currentTarget.style.outline = `1.5px solid ${color}40`; } }}
+                              onMouseLeave={e => { if (!show) { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.outline = `1px solid rgba(255,255,255,0.06)`; } }}>
+                              <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, background: show && isOk ? T.green : show && isSel ? T.red : "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 900, color: "white" }}>
+                                {show && isOk ? "✓" : show && isSel ? "✗" : String.fromCharCode(65 + oi)}
+                              </span>
+                              {o}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {show && (
+                        <div style={{ padding: "10px 14px", borderRadius: 10, background: ans === q.correct ? `${T.green}12` : `${T.red}10`, border: `1px solid ${ans === q.correct ? T.green : T.red}25` }}>
+                          <p style={{ color: ans === q.correct ? "#a3e3c6" : "#fca5a5", fontSize: 12, lineHeight: 1.6 }}>
+                            <strong style={{ color: ans === q.correct ? T.green : T.red }}>{ans === q.correct ? "✅ " : "❌ "}</strong>{q.exp}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {Object.keys(casoAnsw).length === caso.preguntas.length && (
+                <div style={{ marginTop: 16, padding: "14px 18px", borderRadius: 12, background: `${color}12`, border: `1.5px solid ${color}40`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Award style={{ color, width: 20, height: 20 }} />
+                    <p style={{ color: T.white, fontWeight: 900, fontSize: 14 }}>
+                      {caso.preguntas.filter((q, i) => casoAnsw[i] === q.correct).length}/{caso.preguntas.length} correctas
+                    </p>
+                  </div>
+                  {casoIdx < CASOS.length - 1 && (
+                    <button onClick={() => { setCasoIdx(casoIdx + 1); setQueryResult(null); }} style={{
+                      padding: "9px 18px", borderRadius: 10, border: "none", cursor: "pointer",
+                      background: `linear-gradient(135deg,${CASOS[casoIdx + 1].color},${CASOS[casoIdx + 1].color}bb)`,
+                      color: "white", fontWeight: 800, fontSize: 13
+                    }}>Caso {casoIdx + 2} {CASOS[casoIdx + 1].emoji} →</button>
+                  )}
+                </div>
+              )}
+            </Panel>
+          )}
+
+          {/* Tabla de distribución (modo libre, discreto) */}
+          {activeMode === "libre" && isDiscrete && distData.length <= 25 && (
             <Panel color={color} style={{ padding: 20 }}>
               <h4 style={{ color: T.white, fontWeight: 900, fontSize: 14, marginBottom: 12 }}>📋 Tabla de Distribución</h4>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 3px" }}>
                   <thead>
-                    <tr>
-                      {["k", "P(X=k)", "F(k)=P(X≤k)", "k·P(X=k)"].map((h, i) => (
-                        <th key={i} style={{ padding: "6px 12px", color: T.muted, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "center" }}>{h}</th>
-                      ))}
-                    </tr>
+                    <tr>{["k", "P(X=k)", "F(k)=P(X≤k)", "k·P(X=k)"].map((h, i) => (
+                      <th key={i} style={{ padding: "6px 10px", color: T.muted, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "center" }}>{h}</th>
+                    ))}</tr>
                   </thead>
                   <tbody>
                     {distData.map(d => (
                       <tr key={d.k} onClick={() => setHighlightK(highlightK === d.k ? null : d.k)} style={{ cursor: "pointer" }}>
                         {[d.k, (d.prob * 100).toFixed(3) + "%", (d.cdf * 100).toFixed(3) + "%", (d.k * d.prob).toFixed(5)].map((val, i) => (
                           <td key={i} style={{
-                            padding: "8px 12px", textAlign: "center",
-                            background: highlightK === d.k ? `${color}18` : "rgba(255,255,255,0.02)",
+                            padding: "7px 10px", textAlign: "center",
+                            background: highlightK === d.k ? `${color}18` : shadeRange && d.k >= shadeRange.min && d.k <= shadeRange.max ? `${T.yellow}10` : "rgba(255,255,255,0.02)",
                             color: i === 0 ? color : i === 1 ? T.white : i === 2 ? T.poisson : T.pink,
                             fontWeight: i === 0 ? 900 : 600, fontSize: 12,
                             borderRadius: i === 0 ? "7px 0 0 7px" : i === 3 ? "0 7px 7px 0" : 0,
@@ -842,8 +1112,8 @@ const TabCalculadora = () => {
                       </tr>
                     ))}
                     <tr>
-                      <td colSpan={3} style={{ padding: "8px 12px", textAlign: "right", color: T.muted, fontSize: 11, fontWeight: 700, background: `${T.pink}08`, borderRadius: "7px 0 0 7px" }}>E(X) =</td>
-                      <td style={{ padding: "8px 12px", textAlign: "center", color: T.pink, fontWeight: 900, fontSize: 15, background: `${T.pink}08`, borderRadius: "0 7px 7px 0" }}>{stats.EX}</td>
+                      <td colSpan={3} style={{ padding: "7px 10px", textAlign: "right", color: T.muted, fontSize: 11, fontWeight: 700, background: `${T.pink}08`, borderRadius: "7px 0 0 7px" }}>E(X) =</td>
+                      <td style={{ padding: "7px 10px", textAlign: "center", color: T.pink, fontWeight: 900, fontSize: 14, background: `${T.pink}08`, borderRadius: "0 7px 7px 0" }}>{stats.EX}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -855,72 +1125,6 @@ const TabCalculadora = () => {
     </div>
   );
 };
-
-// ══════════════════════════════════════════
-// CASOS APLICADOS — ESCENARIOS REALES
-// ══════════════════════════════════════════
-const CASOS = [
-  {
-    id: "fabrica",
-    dist: "binom",
-    color: T.binom,
-    emoji: "🏭",
-    titulo: "Control de Calidad — Fábrica de Bombillas",
-    contexto: "Una fábrica produce bombillas con tasa de defectos p = 5%. Se inspeccionan n = 20 bombillas al azar. Sea X = número de bombillas defectuosas.",
-    modelo: "X ~ Binomial(n=20, p=0.05)",
-    params: { n: 20, p: 0.05 },
-    preguntas: [
-      { text: "¿Cuál es P(X = 0)? — Ninguna defectuosa", opts: ["0.3585", "0.3774", "0.2641", "0.1887"], correct: 0, exp: "P(X=0) = (0.95)²⁰ = 0.3585 = 35.85%. Más de 1/3 de las veces el lote sale perfecto." },
-      { text: "¿Cuál es P(X = 1)? — Exactamente 1 defectuosa", opts: ["0.3585", "0.3774", "0.1887", "0.0596"], correct: 1, exp: "P(X=1) = C(20,1)·0.05¹·0.95¹⁹ = 20×0.05×0.3774 = 0.3774 = 37.74%." },
-      { text: "¿Cuál es P(X ≥ 2)? — Al menos 2 defectuosas", opts: ["0.2641", "0.3585", "0.7359", "0.1887"], correct: 0, exp: "P(X≥2) = 1 - P(X=0) - P(X=1) = 1 - 0.3585 - 0.3774 = 0.2641 = 26.41%." },
-    ]
-  },
-  {
-    id: "banco",
-    dist: "poisson",
-    color: T.poisson,
-    emoji: "🏦",
-    titulo: "Flujo de Clientes — Sucursal Bancaria",
-    contexto: "En una sucursal bancaria llegan en promedio λ = 6 clientes por hora. Las llegadas son independientes. Sea X = clientes en la próxima hora.",
-    modelo: "X ~ Poisson(λ=6)",
-    params: { lambda: 6 },
-    preguntas: [
-      { text: "¿Cuál es P(X = 4)? — Exactamente 4 clientes", opts: ["0.1339", "0.1606", "0.2240", "0.0892"], correct: 0, exp: "P(X=4) = e⁻⁶·6⁴/4! = 0.0025×1296/24 = 0.1339 = 13.39%." },
-      { text: "¿Cuál es P(X ≤ 2)? — A lo más 2 clientes", opts: ["0.1912", "0.0620", "0.0446", "0.2384"], correct: 1, exp: "P(X≤2) = P(0)+P(1)+P(2) = 0.0025+0.0149+0.0446 = 0.0620 = 6.20%." },
-      { text: "¿Cuál es P(X ≥ 8)? — Más de 7 clientes (saturación)", opts: ["0.1528", "0.2560", "0.3840", "0.0892"], correct: 1, exp: "P(X≥8) = 1 - F(7) = 1 - 0.7440 = 0.2560 = 25.60%. Alta chance de saturación." },
-    ]
-  },
-  {
-    id: "auditoria",
-    dist: "hyper",
-    color: T.hyper,
-    emoji: "📦",
-    titulo: "Auditoría de Inventario — Control de Lote",
-    contexto: "Un lote de N=200 bombillas contiene K=10 defectuosas. Se inspeccionan n=15 sin reemplazo. Sea X = defectuosas en la muestra.",
-    modelo: "X ~ Hipergeométrica(N=200, K=10, n=15)",
-    params: { N: 200, K: 10, n: 15 },
-    preguntas: [
-      { text: "¿Cuál es P(X = 2)? — Exactamente 2 defectuosas", opts: ["0.1365", "0.3835", "0.4500", "0.0238"], correct: 0, exp: "P(X=2) = C(10,2)·C(190,13)/C(200,15) ≈ 0.1365 = 13.65%." },
-      { text: "¿Cuál es P(X = 0)? — Ninguna defectuosa", opts: ["0.1365", "0.3835", "0.4500", "0.9701"], correct: 2, exp: "P(X=0) = C(10,0)·C(190,15)/C(200,15) ≈ 0.4500 = 45.00%." },
-      { text: "¿Cuál es P(X ≤ 2)?", opts: ["0.9701", "0.8335", "0.5865", "0.1365"], correct: 0, exp: "P(X≤2) = P(0)+P(1)+P(2) ≈ 0.4500+0.3835+0.1365 = 0.9701 = 97.01%." },
-    ]
-  },
-  {
-    id: "embotelladora",
-    dist: "normal",
-    color: T.normal,
-    emoji: "🍶",
-    titulo: "Máquina Embotelladora — Control de Volumen",
-    contexto: "Una máquina llena botellas con μ = 500 ml y σ = 4 ml. El volumen sigue distribución Normal. Probabilidades de llenado.",
-    modelo: "X ~ Normal(μ=500, σ=4)",
-    params: { mu: 500, sigma: 4 },
-    preguntas: [
-      { text: "¿Cuál es P(X < 495)? — Menos de 495 ml (quejas)", opts: ["0.1056", "0.2266", "0.0228", "0.3085"], correct: 0, exp: "z = (495-500)/4 = -1.25 → P(X<495) = 0.1056 = 10.56%." },
-      { text: "¿Cuál es P(X > 508)? — Más de 508 ml (desperdicio)", opts: ["0.1056", "0.0228", "0.2266", "0.0062"], correct: 1, exp: "z = (508-500)/4 = 2 → P(X>508) = 1-Φ(2) = 0.0228 = 2.28%." },
-      { text: "¿Cuál es P(498 < X < 502)? — Rango ideal", opts: ["0.1915", "0.3829", "0.6827", "0.2417"], correct: 1, exp: "P(498<X<502): zₗ=(498-500)/4=-0.5, zᵤ=(502-500)/4=0.5. P = Φ(0.5)-Φ(-0.5) = 0.3829 = 38.29%." },
-    ]
-  },
-];
 
 const TabCasos = ({ onComplete }) => {
   const [casoIdx, setCasoIdx] = useState(0);
@@ -1107,7 +1311,7 @@ const QUIZ_QUESTIONS = [
   { dist: "hyper", q: "¿En qué se diferencia la Hipergeométrica de la Binomial?", opts: ["Tiene más parámetros", "El muestreo es sin reemplazo", "Solo aplica a variables continuas", "No tiene valor esperado"], correct: 1, exp: "La diferencia clave es el muestreo SIN reemplazo, lo que hace que p cambie en cada extracción." },
   { dist: "normal", q: "¿Cuál es la relación entre la Binomial B(n,p) y la Normal cuando n es grande?", opts: ["No hay relación", "Son idénticas", "La Binomial se aproxima a N(np, npq)", "La Normal se vuelve discreta"], correct: 2, exp: "Por el Teorema Central del Límite, B(n,p) → N(μ=np, σ²=npq) cuando n→∞." },
   { dist: "binom", q: "¿Cuánto vale Var(X) para X ~ B(n=20, p=0.5)?", opts: ["5", "10", "20", "4"], correct: 0, exp: "Var(X) = n·p·(1-p) = 20×0.5×0.5 = 5." },
-  { dist: "poisson", q: "En Poisson, si λ=4, ¿cuál es σ (desviación estándar)?", opts: ["4", "2", "16", "√4 = 2"], correct: 3, exp: "σ = √Var(X) = √λ = √4 = 2. La desviación estándar es la raíz cuadrada de λ." },
+  { dist: "poisson", q: "En Poisson, si λ=4, ¿cuál es σ (desviación estándar)?", opts: ["4", "2", "16", "1"], correct: 1, exp: "σ = √Var(X) = √λ = √4 = 2. La desviación estándar es la raíz cuadrada de λ." },
 ];
 
 const TabQuiz = ({ onComplete }) => {
@@ -1500,12 +1704,514 @@ const ResumenFinal52 = ({ quizScore, quizTotal, casosScore, onReset }) => {
 };
 
 // ══════════════════════════════════════════
+// TAB VALIDACIÓN — ANÁLISIS EMPÍRICO VS TEÓRICO
+// ══════════════════════════════════════════
+
+// ── Estadísticos descriptivos ──
+const calcStats = (data) => {
+  const n = data.length;
+  if (n === 0) return null;
+  const mean = data.reduce((a, b) => a + b, 0) / n;
+  const sorted = [...data].sort((a, b) => a - b);
+  const variance = data.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+  const std = Math.sqrt(variance);
+  const skewness = std > 0 ? data.reduce((a, b) => a + ((b - mean) / std) ** 3, 0) / n : 0;
+  const kurtosis = std > 0 ? data.reduce((a, b) => a + ((b - mean) / std) ** 4, 0) / n - 3 : 0;
+  const median = n % 2 === 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[Math.floor(n / 2)];
+  const min = sorted[0], max = sorted[n - 1];
+  return { n, mean, median, variance, std, skewness, kurtosis, min, max };
+};
+
+// ── MLE automático por distribución ──
+const estimateParams = (data, distId) => {
+  const s = calcStats(data);
+  if (!s) return null;
+  if (distId === "binom") {
+    const n = Math.round(s.max);
+    const p = Math.min(0.99, Math.max(0.01, s.mean / Math.max(n, 1)));
+    return { n, p };
+  }
+  if (distId === "poisson") {
+    return { lambda: Math.max(0.1, s.mean) };
+  }
+  if (distId === "hyper") {
+    const N = 100, K = Math.round(N * (s.mean / (s.n > 0 ? Math.round(s.mean + 2 * s.std) : 10)));
+    const n = Math.round(s.mean + 2 * s.std);
+    return { N: Math.max(N, n + K), K: Math.max(1, K), n: Math.max(1, Math.min(n, 30)) };
+  }
+  if (distId === "normal") {
+    return { mu: s.mean, sigma: Math.max(0.01, s.std) };
+  }
+  return null;
+};
+
+// ── Error cuadrático medio entre freq obs vs teórica ──
+const calcMSE = (empFreqs, theoryFreqs) => {
+  const n = Math.min(empFreqs.length, theoryFreqs.length);
+  if (n === 0) return 0;
+  const mse = empFreqs.slice(0, n).reduce((acc, ef, i) => acc + (ef - (theoryFreqs[i] || 0)) ** 2, 0) / n;
+  return mse;
+};
+
+// ── Diagnóstico en lenguaje natural ──
+const generateDiagnostico = (distId, stats, params, mse, empFreqs, theoryFreqs) => {
+  if (!stats || !params) return "";
+  const distName = { binom: "Binomial", poisson: "Poisson", hyper: "Hipergeométrica", normal: "Normal" }[distId];
+  const mseNorm = Math.min(mse * 1000, 100);
+  const ajuste = mseNorm < 1 ? "excelente" : mseNorm < 5 ? "adecuado" : mseNorm < 15 ? "moderado" : "deficiente";
+  const paramsStr = distId === "binom" ? `B(n=${params.n}, p=${params.p.toFixed(3)})`
+    : distId === "poisson" ? `Poisson(λ=${params.lambda.toFixed(2)})`
+      : distId === "hyper" ? `H(N=${params.N}, K=${params.K}, n=${params.n})`
+        : `N(μ=${params.mu.toFixed(2)}, σ=${params.sigma.toFixed(2)})`;
+
+  let texto = `El modelo ${distName} ${paramsStr} presenta un ajuste ${ajuste} a los datos observados (ECM=${mse.toFixed(5)}). `;
+
+  // Sesgo
+  if (Math.abs(stats.skewness) < 0.3) texto += `La distribución observada es aproximadamente simétrica (asimetría=${stats.skewness.toFixed(2)}), consistente con el modelo teórico. `;
+  else if (stats.skewness > 0.3) texto += `Se observa asimetría positiva (cola derecha, asimetría=${stats.skewness.toFixed(2)}), ${distId === "normal" ? "lo que sugiere que la Normal podría no ser el modelo más adecuado — considera Poisson o Binomial con p pequeño" : "lo cual es consistente con distribuciones discretas con p < 0.5"}. `;
+  else texto += `Se observa asimetría negativa (cola izquierda, asimetría=${stats.skewness.toFixed(2)}), ${distId === "normal" ? "lo que podría indicar censura o datos transformados" : "posiblemente por p > 0.5 o efecto techo"}. `;
+
+  // Dispersión
+  if (distId === "poisson") {
+    const ratio = stats.variance / stats.mean;
+    if (ratio > 1.3) texto += `⚠️ La varianza (${stats.variance.toFixed(2)}) supera notablemente a la media (${stats.mean.toFixed(2)}), indicando sobredispersión — el modelo Poisson asume igualdad; considera una distribución Binomial Negativa si esto persiste. `;
+    else if (ratio < 0.7) texto += `⚠️ La varianza (${stats.variance.toFixed(2)}) es menor que la media (${stats.mean.toFixed(2)}), indicando subdispersión — el modelo Poisson podría sobreestimar la variabilidad real. `;
+    else texto += `✅ La relación media/varianza (${ratio.toFixed(2)}) es cercana a 1, validando el supuesto fundamental de Poisson. `;
+  }
+  if (distId === "normal") {
+    if (Math.abs(stats.kurtosis) < 0.5) texto += `La curtosis excess (${stats.kurtosis.toFixed(2)}) indica colas similares a la Normal estándar. `;
+    else if (stats.kurtosis > 0.5) texto += `⚠️ Curtosis positiva (${stats.kurtosis.toFixed(2)}) indica colas más pesadas de lo esperado en Normal — los eventos extremos son más frecuentes. `;
+    else texto += `La curtosis negativa (${stats.kurtosis.toFixed(2)}) sugiere colas más ligeras, distribución más concentrada en el centro. `;
+  }
+
+  // Ajuste en colas vs centro
+  const n = Math.min(empFreqs.length, theoryFreqs.length);
+  if (n > 4) {
+    const centerErr = Math.abs((empFreqs[Math.floor(n / 2)] || 0) - (theoryFreqs[Math.floor(n / 2)] || 0));
+    const tailErr = Math.max(Math.abs((empFreqs[0] || 0) - (theoryFreqs[0] || 0)), Math.abs((empFreqs[n - 1] || 0) - (theoryFreqs[n - 1] || 0)));
+    if (tailErr > centerErr * 2) texto += `El modelo captura bien el centro de la distribución pero subestima los valores extremos — zona de mayor discrepancia empírica. `;
+    else if (centerErr > tailErr * 2) texto += `El ajuste en las colas es bueno, pero hay discrepancia en la moda central. `;
+    else texto += `El ajuste es homogéneo entre el centro y las colas de la distribución. `;
+  }
+
+  return texto.trim();
+};
+
+// ── Datasets de ejemplo ──
+const DATASETS_EJEMPLO = [
+  {
+    id: "defectos", name: "Defectos por lote", dist: "binom", emoji: "🏭",
+    desc: "Número de piezas defectuosas en lotes de 20 unidades (n=50 lotes)",
+    data: [0, 1, 0, 2, 1, 0, 1, 3, 1, 0, 2, 1, 0, 0, 1, 2, 0, 1, 1, 0, 2, 0, 1, 0, 1, 3, 0, 1, 2, 1, 0, 0, 1, 0, 2, 1, 1, 0, 0, 1, 2, 0, 1, 0, 1, 0, 2, 1, 1, 0]
+  },
+  {
+    id: "clientes", name: "Clientes por hora", dist: "poisson", emoji: "🏦",
+    desc: "Número de clientes que llegan a ventanilla bancaria por hora (n=60 horas)",
+    data: [4, 7, 5, 6, 8, 3, 5, 6, 9, 4, 7, 5, 6, 4, 8, 5, 6, 7, 3, 5, 6, 8, 4, 5, 7, 6, 5, 4, 6, 8, 5, 7, 4, 6, 5, 3, 7, 6, 5, 4, 8, 6, 5, 7, 4, 6, 5, 6, 7, 4, 5, 6, 8, 5, 6, 4, 7, 5, 6, 5]
+  },
+  {
+    id: "alturas", name: "Alturas estudiantes (cm)", dist: "normal", emoji: "📏",
+    desc: "Alturas de 40 estudiantes universitarios en centímetros",
+    data: [165, 172, 168, 175, 170, 163, 178, 171, 169, 174, 166, 173, 170, 168, 176, 172, 167, 175, 169, 171, 164, 173, 168, 170, 177, 165, 172, 169, 174, 171, 168, 176, 170, 165, 173, 169, 172, 175, 167, 170]
+  },
+  {
+    id: "auditoria", name: "Piezas defectuosas (lote)", dist: "hyper", emoji: "🔍",
+    desc: "Defectuosas encontradas en muestra de 15 de lote con 10 defectuosas en 200",
+    data: [0, 1, 0, 0, 2, 0, 1, 0, 0, 1, 2, 0, 0, 1, 0, 0, 1, 0, 2, 0, 1, 0, 0, 0, 1, 0, 0, 2, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2, 0, 1, 0, 0, 0]
+  },
+];
+
+const TabValidacion = () => {
+  const [distId, setDistId] = useState("poisson");
+  const [inputMode, setInputMode] = useState("ejemplo"); // "ejemplo" | "manual" | "csv"
+  const [selectedEjemplo, setSelectedEjemplo] = useState(0);
+  const [manualInput, setManualInput] = useState("");
+  const [data, setData] = useState(DATASETS_EJEMPLO[1].data);
+  const [parseError, setParseError] = useState("");
+  const [showDiagnostico, setShowDiagnostico] = useState(true);
+  const fileRef = useRef(null);
+
+  // Sincronizar dist al cambiar ejemplo
+  const handleEjemplo = (idx) => {
+    setSelectedEjemplo(idx);
+    const ej = DATASETS_EJEMPLO[idx];
+    setDistId(ej.dist);
+    setData(ej.data);
+    setParseError("");
+  };
+
+  // Parse manual
+  const handleManualParse = () => {
+    const nums = manualInput.split(/[\s,;]+/).map(Number).filter(v => !isNaN(v) && isFinite(v));
+    if (nums.length < 5) { setParseError("Ingresa al menos 5 valores numéricos separados por comas."); return; }
+    setData(nums); setParseError("");
+  };
+
+  // Parse CSV
+  const handleCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target.result;
+      const nums = text.split(/[\n,;\t\r]+/).map(s => parseFloat(s.trim())).filter(v => !isNaN(v) && isFinite(v));
+      if (nums.length < 5) { setParseError("No se encontraron suficientes datos numéricos en el archivo."); return; }
+      setData(nums); setParseError("");
+    };
+    reader.readAsText(file);
+  };
+
+  const stats = useMemo(() => calcStats(data), [data]);
+  const params = useMemo(() => estimateParams(data, distId), [data, distId]);
+
+  // Frecuencias empíricas
+  const empFreqMap = useMemo(() => {
+    const map = {};
+    data.forEach(v => { const k = distId === "normal" ? v : Math.round(v); map[k] = (map[k] || 0) + 1; });
+    return map;
+  }, [data, distId]);
+
+  // Distribución teórica con params estimados
+  const theoryData = useMemo(() => {
+    if (!params) return [];
+    if (distId === "binom") return buildBinom(params.n, params.p);
+    if (distId === "poisson") return buildPoisson(params.lambda);
+    if (distId === "hyper") return buildHyper(params.N, params.K, params.n);
+    if (distId === "normal") return buildNormal(params.mu, params.sigma);
+    return [];
+  }, [distId, params]);
+
+  // Datos del gráfico de comparación
+  const chartData = useMemo(() => {
+    if (!stats || theoryData.length === 0) return [];
+    const n = data.length;
+
+    if (distId === "normal") {
+      // Histograma empírico bins
+      const bins = 12;
+      const min = stats.min, max = stats.max, range = max - min || 1;
+      const binWidth = range / bins;
+      const binCounts = Array(bins).fill(0);
+      data.forEach(v => {
+        const bi = Math.min(bins - 1, Math.floor((v - min) / binWidth));
+        binCounts[bi]++;
+      });
+      return Array.from({ length: bins }, (_, i) => {
+        const x = +(min + (i + 0.5) * binWidth).toFixed(2);
+        const empDensity = binCounts[i] / (n * binWidth);
+        const thPdf = normalPDF(params.mu, params.sigma, x);
+        return { x, empirica: +empDensity.toFixed(5), teorica: +thPdf.toFixed(5), label: x.toString() };
+      });
+    } else {
+      const keys = new Set([...Object.keys(empFreqMap).map(Number), ...theoryData.map(d => d.k)]);
+      return [...keys].sort((a, b) => a - b).map(k => ({
+        k, label: String(k),
+        empirica: +((empFreqMap[k] || 0) / n).toFixed(5),
+        teorica: +(theoryData.find(d => d.k === k)?.prob || 0).toFixed(5),
+      }));
+    }
+  }, [distId, data, empFreqMap, theoryData, stats, params]);
+
+  const mse = useMemo(() => {
+    if (chartData.length === 0) return 0;
+    return calcMSE(chartData.map(d => d.empirica), chartData.map(d => d.teorica));
+  }, [chartData]);
+
+  const diagnostico = useMemo(() => {
+    if (!stats || !params) return "";
+    return generateDiagnostico(distId, stats, params, mse, chartData.map(d => d.empirica), chartData.map(d => d.teorica));
+  }, [distId, stats, params, mse, chartData]);
+
+  const distColor = distId === "binom" ? T.binom : distId === "poisson" ? T.poisson : distId === "hyper" ? T.hyper : T.normal;
+  const DIST_LABELS = { binom: "Binomial", poisson: "Poisson", hyper: "Hipergeométrica", normal: "Normal" };
+  const mseNorm = Math.min(mse * 1000, 100);
+  const ajusteColor = mseNorm < 1 ? T.green : mseNorm < 5 ? T.yellow : mseNorm < 15 ? T.hyper : T.red;
+  const ajusteLabel = mseNorm < 1 ? "Excelente" : mseNorm < 5 ? "Adecuado" : mseNorm < 15 ? "Moderado" : "Deficiente";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+
+      {/* HEADER */}
+      <div style={{ background: `linear-gradient(135deg,${distColor}12,transparent 70%)`, border: `1px solid ${distColor}25`, borderRadius: 18, padding: "20px 24px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg,${distColor},${distColor}99)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <Activity style={{ color: "white", width: 18, height: 18 }} />
+          </div>
+          <div>
+            <h2 style={{ color: T.white, fontWeight: 900, fontSize: 17 }}>Validación Empírica de Modelos</h2>
+            <p style={{ color: T.muted, fontSize: 12 }}>Carga datos reales, estima parámetros automáticamente y contrasta el modelo con la evidencia.</p>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 18, alignItems: "start" }}>
+
+        {/* PANEL IZQUIERDO — entrada de datos + selector */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Selector de distribución */}
+          <div style={{ background: T.panel, border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: 18 }}>
+            <p style={{ color: T.muted, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Distribución a ajustar</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+              {[
+                { id: "binom", label: "Binomial", emoji: "🎯", color: T.binom },
+                { id: "poisson", label: "Poisson", emoji: "⚡", color: T.poisson },
+                { id: "hyper", label: "Hipergeom.", emoji: "🎲", color: T.hyper },
+                { id: "normal", label: "Normal", emoji: "🔔", color: T.normal },
+              ].map(d => (
+                <button key={d.id} onClick={() => setDistId(d.id)} style={{
+                  padding: "9px 10px", borderRadius: 11, border: "none", cursor: "pointer",
+                  background: distId === d.id ? `linear-gradient(135deg,${d.color},${d.color}bb)` : `${d.color}10`,
+                  color: distId === d.id ? "white" : d.color,
+                  fontWeight: 800, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                  outline: distId !== d.id ? `1px solid ${d.color}25` : "none", transition: "all 0.2s"
+                }}>
+                  <span>{d.emoji}</span>{d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Modo de entrada */}
+          <div style={{ background: T.panel, border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: 18 }}>
+            <p style={{ color: T.muted, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Fuente de datos</p>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+              {[["ejemplo", "📦 Ejemplo"], ["manual", "✏️ Manual"], ["csv", "📄 CSV"]].map(([m, l]) => (
+                <button key={m} onClick={() => setInputMode(m)} style={{
+                  flex: 1, padding: "7px 4px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 800,
+                  background: inputMode === m ? `${distColor}25` : "rgba(255,255,255,0.04)",
+                  color: inputMode === m ? distColor : T.muted,
+                  outline: inputMode === m ? `1px solid ${distColor}40` : "none", transition: "all 0.2s"
+                }}>{l}</button>
+              ))}
+            </div>
+
+            {inputMode === "ejemplo" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {DATASETS_EJEMPLO.map((ej, i) => (
+                  <button key={ej.id} onClick={() => handleEjemplo(i)} style={{
+                    padding: "10px 12px", borderRadius: 11, border: "none", cursor: "pointer", textAlign: "left",
+                    background: selectedEjemplo === i ? `${distColor}15` : "rgba(255,255,255,0.03)",
+                    outline: selectedEjemplo === i ? `1.5px solid ${distColor}40` : "1px solid rgba(255,255,255,0.06)",
+                    transition: "all 0.2s"
+                  }}>
+                    <p style={{ color: T.white, fontWeight: 800, fontSize: 12, marginBottom: 3 }}>{ej.emoji} {ej.name}</p>
+                    <p style={{ color: T.muted, fontSize: 10, lineHeight: 1.5 }}>{ej.desc}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {inputMode === "manual" && (
+              <div>
+                <textarea
+                  value={manualInput}
+                  onChange={e => setManualInput(e.target.value)}
+                  placeholder="Pega tus datos separados por comas o espacios&#10;Ej: 3, 5, 2, 7, 4, 6, 5, 3..."
+                  style={{
+                    width: "100%", minHeight: 100, background: "rgba(0,0,0,0.3)", border: `1px solid ${distColor}30`,
+                    borderRadius: 10, color: T.white, fontSize: 12, padding: "10px 12px", resize: "vertical",
+                    fontFamily: "monospace", outline: "none", boxSizing: "border-box"
+                  }}
+                />
+                {parseError && <p style={{ color: T.red, fontSize: 11, marginTop: 5 }}>⚠️ {parseError}</p>}
+                <button onClick={handleManualParse} style={{
+                  marginTop: 8, width: "100%", padding: "9px", borderRadius: 10, border: "none", cursor: "pointer",
+                  background: `linear-gradient(135deg,${distColor},${distColor}aa)`, color: "white", fontWeight: 800, fontSize: 13
+                }}>Analizar datos</button>
+              </div>
+            )}
+
+            {inputMode === "csv" && (
+              <div>
+                <div onClick={() => fileRef.current?.click()} style={{
+                  border: `2px dashed ${distColor}35`, borderRadius: 12, padding: "22px 16px", textAlign: "center",
+                  cursor: "pointer", background: `${distColor}05`, transition: "all 0.2s"
+                }}>
+                  <p style={{ fontSize: 24, marginBottom: 6 }}>📄</p>
+                  <p style={{ color: T.white, fontWeight: 700, fontSize: 13 }}>Click para subir CSV</p>
+                  <p style={{ color: T.muted, fontSize: 11, marginTop: 4 }}>Una columna numérica, sin encabezado</p>
+                </div>
+                <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={handleCSV} />
+                {parseError && <p style={{ color: T.red, fontSize: 11, marginTop: 6 }}>⚠️ {parseError}</p>}
+              </div>
+            )}
+          </div>
+
+          {/* Resumen de datos cargados */}
+          {stats && (
+            <div style={{ background: T.panel, border: `1px solid ${distColor}20`, borderRadius: 16, padding: 16 }}>
+              <p style={{ color: T.muted, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Datos cargados</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
+                {[
+                  { label: "n", val: stats.n, color: distColor },
+                  { label: "Media", val: stats.mean.toFixed(3), color: distColor },
+                  { label: "Mediana", val: stats.median.toFixed(2), color: T.muted },
+                  { label: "Std", val: stats.std.toFixed(3), color: T.muted },
+                  { label: "Asimetría", val: stats.skewness.toFixed(3), color: Math.abs(stats.skewness) > 0.5 ? T.yellow : T.green },
+                  { label: "Curtosis exc.", val: stats.kurtosis.toFixed(3), color: Math.abs(stats.kurtosis) > 1 ? T.yellow : T.green },
+                ].map((m, i) => (
+                  <div key={i} style={{ padding: "7px 10px", borderRadius: 9, background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <p style={{ color: T.muted, fontSize: 9, fontWeight: 700, textTransform: "uppercase", marginBottom: 2 }}>{m.label}</p>
+                    <p style={{ color: m.color, fontWeight: 900, fontSize: 14, fontFamily: "Georgia,serif" }}>{m.val}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Parámetros estimados (MLE) */}
+          {params && (
+            <div style={{ background: `${distColor}08`, border: `1.5px solid ${distColor}30`, borderRadius: 16, padding: 16 }}>
+              <p style={{ color: distColor, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Parámetros estimados (MLE)</p>
+              {distId === "binom" && <p style={{ color: T.white, fontFamily: "monospace", fontSize: 13 }}>n = {params.n}, p = {params.p.toFixed(4)}</p>}
+              {distId === "poisson" && <p style={{ color: T.white, fontFamily: "monospace", fontSize: 13 }}>λ = {params.lambda.toFixed(4)}</p>}
+              {distId === "hyper" && <p style={{ color: T.white, fontFamily: "monospace", fontSize: 12 }}>N={params.N}, K={params.K}, n={params.n}</p>}
+              {distId === "normal" && <p style={{ color: T.white, fontFamily: "monospace", fontSize: 13 }}>μ = {params.mu.toFixed(4)}, σ = {params.sigma.toFixed(4)}</p>}
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ flex: 1, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                  <div style={{ width: `${Math.max(5, 100 - mseNorm * 5)}%`, height: "100%", borderRadius: 3, background: ajusteColor, transition: "width 0.4s" }} />
+                </div>
+                <span style={{ color: ajusteColor, fontWeight: 900, fontSize: 12, minWidth: 70 }}>Ajuste: {ajusteLabel}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* PANEL DERECHO — gráfica + diagnóstico */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Gráfico comparativo */}
+          <div style={{ background: T.panel, border: `1px solid ${distColor}20`, borderRadius: 18, padding: "20px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div>
+                <h3 style={{ color: T.white, fontWeight: 900, fontSize: 15 }}>Empírico vs Teórico — {DIST_LABELS[distId]}</h3>
+                <p style={{ color: T.muted, fontSize: 11, marginTop: 2 }}>
+                  {distId === "normal" ? "Densidad observada vs f(x) teórica" : "Frecuencias relativas observadas vs P(X=k) teórica"}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 2, background: distColor }} />
+                  <span style={{ color: T.muted, fontSize: 11 }}>Observado</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 10, height: 3, background: "#f97316", borderRadius: 1 }} />
+                  <span style={{ color: T.muted, fontSize: 11 }}>Teórico</span>
+                </div>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={chartData} margin={{ top: 5, right: 15, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="label" tick={{ fill: T.muted, fontSize: 11 }} />
+                <YAxis tick={{ fill: T.muted, fontSize: 11 }} tickFormatter={v => (v * 100).toFixed(1) + '%'} />
+                <Tooltip content={<CustomTooltip color={distColor} discrete={distId !== "normal"} />} />
+                <Bar dataKey="empirica" name="Observado" fill={distColor} fillOpacity={0.75} radius={[3, 3, 0, 0]} />
+                <Line dataKey="teorica" name="Teórico" stroke="#f97316" strokeWidth={2.5} dot={false} type="monotone" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Métricas de ajuste */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+            {[
+              { label: "Error Cuadrático Medio", val: mse.toFixed(6), sub: "ECM (obs−teo)²", color: ajusteColor, icon: <Target style={{ width: 14, height: 14 }} /> },
+              { label: "Calidad del ajuste", val: ajusteLabel, sub: `ECM×1000 = ${mseNorm.toFixed(2)}`, color: ajusteColor, icon: <CheckCircle style={{ width: 14, height: 14 }} /> },
+              { label: "Asimetría observada", val: stats?.skewness.toFixed(3) ?? "—", sub: Math.abs(stats?.skewness ?? 0) < 0.3 ? "Simétrica ✅" : stats?.skewness > 0 ? "Cola derecha ⚠️" : "Cola izquierda ⚠️", color: Math.abs(stats?.skewness ?? 0) < 0.3 ? T.green : T.yellow, icon: <TrendingUp style={{ width: 14, height: 14 }} /> },
+            ].map((m, i) => (
+              <div key={i} style={{ padding: "14px 16px", borderRadius: 14, background: T.panel, border: `1px solid ${m.color}25` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, color: m.color }}>{m.icon}<span style={{ fontSize: 11, fontWeight: 700, color: T.muted }}>{m.label}</span></div>
+                <p style={{ color: m.color, fontWeight: 900, fontSize: 18, fontFamily: "Georgia,serif" }}>{m.val}</p>
+                <p style={{ color: T.muted, fontSize: 10, marginTop: 3 }}>{m.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Diagnóstico automático en lenguaje natural */}
+          <div style={{ background: `${distColor}06`, border: `1.5px solid ${distColor}25`, borderRadius: 18, overflow: "hidden" }}>
+            <button onClick={() => setShowDiagnostico(s => !s)} style={{
+              width: "100%", padding: "16px 20px", background: "transparent", border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "space-between"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: `linear-gradient(135deg,${distColor},${distColor}99)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <Brain style={{ color: "white", width: 15, height: 15 }} />
+                </div>
+                <div style={{ textAlign: "left" }}>
+                  <p style={{ color: T.white, fontWeight: 900, fontSize: 14 }}>🔍 Diagnóstico Automático</p>
+                  <p style={{ color: T.muted, fontSize: 11 }}>Interpretación del ajuste en lenguaje natural</p>
+                </div>
+              </div>
+              <ChevronRight style={{ color: distColor, width: 16, height: 16, transform: showDiagnostico ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
+            </button>
+            {showDiagnostico && diagnostico && (
+              <div style={{ padding: "0 20px 20px" }}>
+                <div style={{ padding: "16px 18px", borderRadius: 14, background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <p style={{ color: "#cbd5e1", fontSize: 13, lineHeight: 2, fontStyle: "italic" }}>
+                    "{diagnostico}"
+                  </p>
+                </div>
+                <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 11, background: `${T.yellow}08`, border: `1px solid ${T.yellow}20` }}>
+                  <p style={{ color: T.yellow, fontSize: 11, fontWeight: 700 }}>
+                    📌 Nota pedagógica: Este diagnóstico es descriptivo — valida visualmente el ajuste del modelo.
+                    En el próximo laboratorio aprenderás a cuantificar este ajuste formalmente usando <strong>pruebas de bondad de ajuste</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Tabla empírico vs teórico (discreta) */}
+          {distId !== "normal" && chartData.length <= 20 && (
+            <div style={{ background: T.panel, border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: 18, overflowX: "auto" }}>
+              <h3 style={{ color: T.white, fontWeight: 900, fontSize: 14, marginBottom: 14 }}>Tabla Comparativa — Frecuencias Relativas</h3>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    {["k", "Frec. Obs.", "P(X=k) Teo.", "Diferencia", ""].map((h, i) => (
+                      <th key={i} style={{ color: T.muted, fontWeight: 700, padding: "6px 10px", textAlign: i === 0 ? "center" : "right", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {chartData.map((d, i) => {
+                    const diff = d.empirica - d.teorica;
+                    const absDiff = Math.abs(diff);
+                    const diffColor = absDiff < 0.01 ? T.green : absDiff < 0.03 ? T.yellow : T.red;
+                    const barW = Math.min(60, absDiff * 1500);
+                    return (
+                      <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                        <td style={{ color: distColor, fontWeight: 900, padding: "6px 10px", textAlign: "center", fontFamily: "monospace" }}>{d.label}</td>
+                        <td style={{ color: T.white, padding: "6px 10px", textAlign: "right", fontFamily: "monospace" }}>{(d.empirica * 100).toFixed(2)}%</td>
+                        <td style={{ color: "#94a3b8", padding: "6px 10px", textAlign: "right", fontFamily: "monospace" }}>{(d.teorica * 100).toFixed(2)}%</td>
+                        <td style={{ color: diffColor, padding: "6px 10px", textAlign: "right", fontFamily: "monospace" }}>{diff >= 0 ? "+" : ""}{(diff * 100).toFixed(2)}%</td>
+                        <td style={{ padding: "6px 8px", width: 70 }}>
+                          <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                            <div style={{ width: `${barW}%`, height: "100%", borderRadius: 3, background: diffColor }} />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════
 const TABS = [
   { id: "intro", label: "Introducción", icon: <BookOpen style={{ width: 14, height: 14 }} /> },
   { id: "calc", label: "Calculadora", icon: <Calculator style={{ width: 14, height: 14 }} /> },
-  { id: "casos", label: "Casos Reales", icon: <FlaskConical style={{ width: 14, height: 14 }} /> },
+  { id: "validacion", label: "Validación", icon: <Activity style={{ width: 14, height: 14 }} /> },
   { id: "quiz", label: "Quiz", icon: <Brain style={{ width: 14, height: 14 }} /> },
 ];
 
@@ -1614,7 +2320,7 @@ const Lab5_2 = ({ goHome, setView }) => {
         {/* CONTENIDO POR TAB */}
         {activeTab === "intro" && <TabIntro />}
         {activeTab === "calc" && <TabCalculadora />}
-        {activeTab === "casos" && <TabCasos onComplete={handleCasoComplete} />}
+        {activeTab === "validacion" && <TabValidacion />}
         {activeTab === "quiz" && !showResumen && <TabQuiz onComplete={handleQuizComplete} />}
         {activeTab === "quiz" && showResumen && (
           <ResumenFinal52
